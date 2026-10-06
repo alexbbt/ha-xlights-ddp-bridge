@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import os
@@ -199,11 +200,54 @@ def make_handler(
             self.end_headers()
             self.wfile.write(raw)
 
+        def _read_chunked(self) -> bytes:
+            """Decode a chunked request body (common behind HA Ingress streaming)."""
+            chunks: list[bytes] = []
+            while True:
+                line = self.rfile.readline()
+                if not line:
+                    break
+                size_token = line.strip().split(b";", 1)[0]
+                try:
+                    size = int(size_token, 16)
+                except ValueError:
+                    break
+                if size == 0:
+                    # Discard trailers
+                    while True:
+                        trailer = self.rfile.readline()
+                        if trailer in (b"\r\n", b"\n", b""):
+                            break
+                    break
+                chunks.append(self.rfile.read(size))
+                self.rfile.read(2)  # CRLF after chunk
+            return b"".join(chunks)
+
+        def _read_raw_body(self) -> bytes:
+            # Prefer chunked: some Ingress paths set Content-Length: 0 incorrectly.
+            te = (self.headers.get("Transfer-Encoding") or "").lower()
+            if "chunked" in te:
+                return self._read_chunked()
+            length_hdr = self.headers.get("Content-Length")
+            if length_hdr is not None and str(length_hdr).strip() != "":
+                n = int(length_hdr)
+                return self.rfile.read(n) if n > 0 else b""
+            return b""
+
         def _read_json(self) -> dict[str, Any]:
-            length = int(self.headers.get("Content-Length", "0") or "0")
-            if length <= 0:
+            raw = self._read_raw_body()
+            if not raw:
+                # Fallback: UI also sends base64 JSON in a header when Ingress
+                # drops POST bodies (seen with ingress_stream / some proxies).
+                b64 = self.headers.get("X-Bridge-Body") or ""
+                if b64.strip():
+                    try:
+                        raw = base64.b64decode(b64.strip(), validate=False)
+                    except (ValueError, TypeError):
+                        raw = b""
+            if not raw:
                 return {}
-            return json.loads(self.rfile.read(length).decode())
+            return json.loads(raw.decode())
 
         def _ingress_path(self) -> str:
             """External Ingress prefix, e.g. /api/hassio_ingress/<token>."""
@@ -338,13 +382,44 @@ def make_handler(
             body = self._read_json()
 
             if path in ("/bridge/config", "/api/config"):
-                lights = [str(x) for x in body.get("lights", []) if str(x).strip()]
-                hz = float(body.get("hz", stats.hz))
-                if hz < 0.1 or hz > 60:
+                raw_lights = body.get("lights", [])
+                if not isinstance(raw_lights, list):
+                    self._json(400, {"error": "lights must be a list of entity_id strings"})
+                    return
+                lights = [str(x).strip() for x in raw_lights if str(x).strip()]
+                raw_hz = body.get("hz", stats.hz)
+                try:
+                    hz = float(raw_hz)
+                except (TypeError, ValueError):
+                    self._json(400, {"error": f"hz must be a number (got {raw_hz!r})"})
+                    return
+                if hz != hz or hz < 0.1 or hz > 60:  # hz != hz catches NaN
                     self._json(400, {"error": "hz must be between 0.1 and 60"})
                     return
                 if not lights:
-                    self._json(400, {"error": "Configure at least one light"})
+                    cl = self.headers.get("Content-Length")
+                    te = self.headers.get("Transfer-Encoding")
+                    has_hdr = bool(self.headers.get("X-Bridge-Body"))
+                    print(
+                        f"config POST empty lights; keys={list(body.keys())} "
+                        f"Content-Length={cl!r} Transfer-Encoding={te!r} "
+                        f"X-Bridge-Body={has_hdr}",
+                        flush=True,
+                    )
+                    self._json(
+                        400,
+                        {
+                            "error": (
+                                "No lights received. Add lights to Mapped and Save. "
+                                "If Mapped was not empty, update the add-on "
+                                "(POST body may have been dropped by Ingress)."
+                            ),
+                            "received_keys": list(body.keys()),
+                            "content_length": cl,
+                            "transfer_encoding": te,
+                            "bridge_body_header": has_hdr,
+                        },
+                    )
                     return
                 opts = load_options()
                 opts["hz"] = hz

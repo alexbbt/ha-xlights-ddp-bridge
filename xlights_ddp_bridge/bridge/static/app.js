@@ -91,10 +91,29 @@
 
   function api(path, opts = {}) {
     const url = apiUrl(path);
+    const headers = {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      ...(opts.headers || {}),
+    };
+    // Ingress sometimes drops POST bodies; mirror JSON in a header as backup.
+    if (
+      opts.body &&
+      typeof opts.body === "string" &&
+      (opts.method || "GET").toUpperCase() !== "GET"
+    ) {
+      try {
+        headers["X-Bridge-Body"] = btoa(
+          unescape(encodeURIComponent(opts.body))
+        );
+      } catch {
+        /* header optional */
+      }
+    }
     return fetch(url, {
-      credentials: "same-origin",
-      headers: { "Content-Type": "application/json", ...(opts.headers || {}) },
       ...opts,
+      credentials: "same-origin",
+      headers,
     }).then(async (r) => {
       const text = await r.text();
       let data = {};
@@ -266,16 +285,26 @@
   $("filter").addEventListener("input", renderAvailable);
 
   $("save").onclick = async () => {
+    const hz = parseFloat($("hz").value);
+    if (!mapped.length) {
+      $("saveMsg").textContent =
+        "Add at least one light to Mapped (click Add on the left), then Save.";
+      return;
+    }
+    if (!Number.isFinite(hz) || hz < 0.1 || hz > 60) {
+      $("saveMsg").textContent = "Hz must be a number between 0.1 and 60.";
+      return;
+    }
     $("saveMsg").textContent = "Saving…";
     try {
       await api("bridge/config", {
         method: "POST",
         body: JSON.stringify({
           lights: mapped,
-          hz: parseFloat($("hz").value),
+          hz,
         }),
       });
-      $("saveMsg").textContent = "Saved (hot-reloaded).";
+      $("saveMsg").textContent = `Saved ${mapped.length} light(s) @ ${hz} Hz.`;
       await refreshStatus();
     } catch (e) {
       $("saveMsg").textContent = e.message || String(e);

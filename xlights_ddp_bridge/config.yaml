@@ -16,7 +16,8 @@ homeassistant_api: true
 hassio_api: true
 ingress: true
 ingress_port: 8099
-ingress_stream: true
+# stream mode can chunk POST bodies without Content-Length; our UI needs the body
+ingress_stream: false
 panel_icon: mdi:palette-outline
 panel_title: xLights DDP Bridge
 panel_admin: false
