@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.7
+
+### Changes
+
+- Log the add-on version in the Ingress Web UI console. (`30585f7`)
+
+
 ## 0.2.6
 
 ### Changes
