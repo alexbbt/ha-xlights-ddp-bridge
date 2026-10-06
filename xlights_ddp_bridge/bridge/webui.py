@@ -157,6 +157,14 @@ def make_handler(
                 return {}
             return json.loads(self.rfile.read(length).decode())
 
+        def _ingress_path(self) -> str:
+            """External Ingress prefix, e.g. /api/hassio_ingress/<token>."""
+            for header in ("X-Ingress-Path", "X-Forwarded-Prefix"):
+                value = (self.headers.get(header) or "").strip().rstrip("/")
+                if value:
+                    return value
+            return ""
+
         def _serve_static(self, rel: str) -> None:
             rel = rel.split("?", 1)[0].lstrip("/") or "index.html"
             path = (STATIC_DIR / rel).resolve()
@@ -169,13 +177,19 @@ def make_handler(
                 ctype = "application/javascript; charset=utf-8"
             elif path.suffix == ".css":
                 ctype = "text/css; charset=utf-8"
+            elif path.suffix == ".html":
+                ingress = self._ingress_path()
+                # Inject path Home Assistant sends on every Ingress request
+                script = (
+                    f"<script>window.__INGRESS_PATH__={json.dumps(ingress)};</script>"
+                )
+                html = data.decode("utf-8").replace("<!--INGRESS_SCRIPT-->", script, 1)
+                data = html.encode("utf-8")
+                print(f"Serving UI with X-Ingress-Path={ingress!r}", flush=True)
             self.send_response(200)
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(data)))
-            if path.suffix in {".js", ".css"}:
-                self.send_header("Cache-Control", "no-cache")
-            else:
-                self.send_header("Cache-Control", "no-store")
+            self.send_header("Cache-Control", "no-store")
             self.end_headers()
             self.wfile.write(data)
 

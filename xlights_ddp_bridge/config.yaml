@@ -16,8 +16,10 @@ homeassistant_api: true
 hassio_api: true
 ingress: true
 ingress_port: 8099
+ingress_stream: true
 panel_icon: mdi:palette-outline
 panel_title: xLights DDP Bridge
+panel_admin: false
 ports:
   4048/udp: 4048
 ports_description:

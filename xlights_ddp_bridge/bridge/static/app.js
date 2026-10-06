@@ -5,28 +5,37 @@
   let mapped = [];
 
   /**
-   * Home Assistant Ingress serves this UI under
-   * /api/hassio_ingress/<token>/... — never call origin-absolute "/api/..."
-   * (that hits Home Assistant Core: 401/404).
+   * Prefer server-injected path (from X-Ingress-Path). Never use origin-root
+   * "/api/..." — that hits Home Assistant Core instead of this add-on.
    */
-  function ingressRoot() {
+  function bridgeBase() {
+    if (typeof window.__INGRESS_PATH__ === "string" && window.__INGRESS_PATH__) {
+      return window.__INGRESS_PATH__.replace(/\/+$/, "");
+    }
     const path = window.location.pathname || "/";
     const m = path.match(/^(.*?\/api\/hassio_ingress\/[^/]+)/);
     if (m) return m[1];
-    // Local / non-ingress: directory containing this page
-    if (path.endsWith("/")) return path.replace(/\/$/, "") || "";
+    // Dev / non-ingress: stay on current directory
+    if (path.endsWith("/")) return path.replace(/\/+$/, "") || "";
     return path.replace(/\/[^/]*$/, "");
   }
 
   function apiUrl(path) {
-    const root = ingressRoot();
+    const base = bridgeBase();
     const cleaned = String(path).replace(/^\/+/, "");
-    return `${root}/${cleaned}`;
+    // Path-absolute under ingress, or relative when base is empty
+    return base ? `${base}/${cleaned}` : cleaned;
+  }
+
+  function showBase() {
+    const el = $("apiBase");
+    if (el) el.textContent = `API base: ${bridgeBase() || "(relative)"} → ${apiUrl("bridge/status")}`;
   }
 
   function api(path, opts = {}) {
     const url = apiUrl(path);
     return fetch(url, {
+      credentials: "same-origin",
       headers: { "Content-Type": "application/json", ...(opts.headers || {}) },
       ...opts,
     }).then(async (r) => {
@@ -36,7 +45,7 @@
         data = text ? JSON.parse(text) : {};
       } catch {
         throw new Error(
-          `Bad response from ${url} (${r.status}). Rebuild the add-on and hard-refresh.`
+          `Bad response from ${url} (${r.status}). Update/rebuild the add-on, then hard-refresh.`
         );
       }
       if (!r.ok) {
@@ -184,6 +193,7 @@
   }
 
   async function load() {
+    showBase();
     const [cfg, avail] = await Promise.all([
       api("bridge/config"),
       api("bridge/lights/available"),
@@ -254,6 +264,7 @@
   };
 
   load().catch((e) => {
+    showBase();
     $("status").textContent = e.message || String(e);
   });
   setInterval(refreshStatus, 2000);

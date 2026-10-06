@@ -4,13 +4,15 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>xLights DDP Bridge</title>
-  <link rel="stylesheet" href="static/style.css?v=0.2.3" />
+  <!--INGRESS_SCRIPT-->
+  <link rel="stylesheet" href="static/style.css?v=0.2.4" />
 </head>
 <body>
   <main>
     <header>
       <h1>xLights DDP Bridge</h1>
       <p class="sub">Pick lights here or in the Configuration tab. Pixel order = DDP channel order.</p>
+      <p id="apiBase" class="hint">API base: …</p>
     </header>
 
     <section class="card">
@@ -62,6 +64,6 @@
       <ul id="events" class="events"></ul>
     </section>
   </main>
-  <script src="static/app.js?v=0.2.3"></script>
+  <script src="static/app.js?v=0.2.4"></script>
 </body>
 </html>
