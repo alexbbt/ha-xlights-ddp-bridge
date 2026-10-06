@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.5
+
+### Changes
+
+- Inject X-Ingress-Path into the Web UI for correct API routing. (`9e1c3ae`)
+
+
 ## 0.2.4
 
 ### Changes
