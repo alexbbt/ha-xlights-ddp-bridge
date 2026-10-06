@@ -1,0 +1,4 @@
+name: xLights DDP Entity Bridge
+url: https://github.com/alexbbt/ha-xlights-ddp-bridge
+# Supervisor: Settings → Add-ons → Repositories → add this URL
+maintainer: Alexander Bell-Towne <alexander@bell-towne.com>
