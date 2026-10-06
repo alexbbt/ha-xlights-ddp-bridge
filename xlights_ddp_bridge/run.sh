@@ -25,10 +25,11 @@ fi
 export HZ DDP_PORT DDP_BIND LIGHTS_JSON
 export HA_URL="http://supervisor/core/api"
 export HA_TOKEN="${SUPERVISOR_TOKEN}"
+export INGRESS_PORT="${INGRESS_PORT:-8099}"
 export PYTHONUNBUFFERED=1
 export PYTHONPATH="/opt/xlights_ddp_bridge"
 
-bashio::log.info "Starting xLights DDP bridge (hz=${HZ}, port=${DDP_PORT}, lights=${COUNT})"
+bashio::log.info "Starting xLights DDP bridge (hz=${HZ}, port=${DDP_PORT}, lights=${COUNT}, ingress=${INGRESS_PORT})"
 
 cd /opt/xlights_ddp_bridge
 exec python3 -m bridge

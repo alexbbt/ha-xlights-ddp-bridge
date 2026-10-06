@@ -38,11 +38,23 @@ Each configured `entity_id` is one RGB pixel. Channel count in xLights/FPP shoul
    ```
 
 3. Install **xLights DDP Entity Bridge**
-4. Configure `hz`, `ddp_port`, and ordered `lights` (see below)
-5. Start the add-on
-6. In xLights or FPP, point the controller at your Home Assistant host IP (`HOMEASSISTANT_IP`), protocol **DDP**, channels = `3 ×` light count
+4. Start the add-on, then either:
+   - **Open Web UI** (Ingress) to pick and reorder lights, or
+   - **Configuration** tab to edit `lights` as text (both stay in sync)
+5. In xLights or FPP, point the controller at your Home Assistant host IP (`HOMEASSISTANT_IP`), protocol **DDP**, channels = `3 ×` light count
 
 Default UDP port: **4048**. Allow that port from your show network to Home Assistant if you use VLANs or firewalls.
+
+## Open Web UI (Ingress)
+
+Supervisor’s Configuration tab cannot host Home Assistant entity pickers, so this add-on also provides an Ingress page:
+
+- Ordered light picker (search, add/remove, reorder = DDP pixel order)
+- Live status: HA health, DDP listen address, last xLights/FPP peer, packets/sec, payload size check, per-pixel color swatches
+- Tests: HA connection check, pulse white / all off
+- Recent events ring buffer (full logs remain on the add-on **Log** tab)
+
+Saving lights/`hz` from Ingress writes the same options as the Configuration tab and hot-reloads the bridge. Changing `ddp_port` / `ddp_bind` still needs an add-on restart.
 
 ## Configuration
 
@@ -134,6 +146,17 @@ Unit tests (no Home Assistant required):
 cd xlights_ddp_bridge
 PYTHONPATH=. python3 -m unittest discover -s tests -v
 ```
+
+## Releases
+
+Pushes to `main` that pass CI automatically bump the add-on version, tag `vX.Y.Z`, and publish a [GitHub Release](https://github.com/alexbbt/ha-xlights-ddp-bridge/releases).
+
+- Default bump: **patch**
+- Commit message contains `[minor]` or starts with `feat:` → **minor**
+- Commit message contains `[major]` or `BREAKING CHANGE` → **major**
+- `[skip release]` in the commit message skips publishing
+
+After a release, use **Check for updates** on the add-on in Supervisor (it tracks `config.yaml` `version` on `main`).
 
 ## Contributing
 

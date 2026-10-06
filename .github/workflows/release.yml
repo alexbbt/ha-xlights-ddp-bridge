@@ -1,0 +1,125 @@
+name: Release
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Bump version and publish release
+    if: >
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Skip checks
+        id: skip
+        run: |
+          set -euo pipefail
+          MSG=$(git log -1 --pretty=%B)
+          echo "commit_msg<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$MSG" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+          if echo "$MSG" | grep -Eqi '\[skip release\]'; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Determine bump type
+        if: steps.skip.outputs.skip != 'true'
+        id: bump
+        run: |
+          set -euo pipefail
+          MSG="${{ steps.skip.outputs.commit_msg }}"
+          if echo "$MSG" | grep -Eqi '\[major\]|BREAKING CHANGE'; then
+            echo "type=major" >> "$GITHUB_OUTPUT"
+          elif echo "$MSG" | grep -Eqi '\[minor\]|^feat(\(|:)|^feature:'; then
+            echo "type=minor" >> "$GITHUB_OUTPUT"
+          else
+            echo "type=patch" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Bump version files
+        if: steps.skip.outputs.skip != 'true'
+        id: version
+        run: |
+          set -euo pipefail
+          CONFIG=xlights_ddp_bridge/config.yaml
+          DOCKER=xlights_ddp_bridge/Dockerfile
+          CURRENT=$(grep -E '^version:' "$CONFIG" | sed -E 's/version:[[:space:]]*"?([^"]+)"?/\1/')
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
+          case "${{ steps.bump.outputs.type }}" in
+            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+            patch) PATCH=$((PATCH + 1)) ;;
+          esac
+          NEW="${MAJOR}.${MINOR}.${PATCH}"
+          echo "current=${CURRENT}" >> "$GITHUB_OUTPUT"
+          echo "new=${NEW}" >> "$GITHUB_OUTPUT"
+
+          if git rev-parse "v${NEW}" >/dev/null 2>&1; then
+            echo "Tag v${NEW} already exists; skipping"
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "exists=false" >> "$GITHUB_OUTPUT"
+
+          sed -i -E "s/^version: .*/version: \"${NEW}\"/" "$CONFIG"
+          sed -i -E "s/io.hass.version=\"[^\"]+\"/io.hass.version=\"${NEW}\"/" "$DOCKER"
+
+          SUBJECT=$(git log -1 --pretty=%s)
+          SHA=$(git rev-parse --short HEAD)
+          if ! grep -qE "^## ${NEW}$" CHANGELOG.md; then
+            BODY=$(awk 'BEGIN{p=0} /^# Changelog/{next} {print}' CHANGELOG.md)
+            {
+              echo "# Changelog"
+              echo
+              echo "## ${NEW}"
+              echo
+              echo "- ${SUBJECT} (\`${SHA}\`)"
+              echo
+              printf '%s\n' "$BODY"
+            } > CHANGELOG.md.tmp
+            mv CHANGELOG.md.tmp CHANGELOG.md
+          fi
+
+      - name: Commit, tag, and release
+        if: steps.skip.outputs.skip != 'true' && steps.version.outputs.exists != 'true'
+        env:
+          NEW: ${{ steps.version.outputs.new }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add xlights_ddp_bridge/config.yaml xlights_ddp_bridge/Dockerfile CHANGELOG.md
+          git commit -m "chore: release v${NEW} [skip release]"
+          git push origin main
+          git tag "v${NEW}"
+          git push origin "v${NEW}"
+
+          NOTES=$(awk -v ver="## ${NEW}" '
+            $0 == ver {capture=1; next}
+            capture && /^## / {exit}
+            capture {print}
+          ' CHANGELOG.md)
+          if [ -z "${NOTES// }" ]; then
+            NOTES="Release v${NEW}"
+          fi
+          gh release create "v${NEW}" \
+            --title "v${NEW}" \
+            --notes "${NOTES}"

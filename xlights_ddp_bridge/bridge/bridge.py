@@ -17,6 +17,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Sequence
 
+from .stats import RuntimeStats
+from .webui import start_webui
+
 
 def parse_ddp(packet: bytes) -> bytes | None:
     """Return RGB payload bytes from a DDP packet, or None if not usable."""
@@ -85,7 +88,6 @@ def load_config_from_env() -> BridgeConfig:
     if not ha_url or not ha_token:
         raise SystemExit("HA_URL and HA_TOKEN are required")
 
-    # Normalize: accept base with or without /api
     api_base = ha_url if ha_url.endswith("/api") else f"{ha_url}/api"
 
     return BridgeConfig(
@@ -182,6 +184,7 @@ def apply_pixels(
 def run_bridge(
     config: BridgeConfig,
     *,
+    stats: RuntimeStats | None = None,
     client: HomeAssistantClient | None = None,
     recv: Callable[[], bytes | None] | None = None,
     clock: Callable[[], float] = time.monotonic,
@@ -189,21 +192,35 @@ def run_bridge(
 ) -> None:
     """Main loop. `recv` injectable for tests (returns packet or None on idle)."""
     ha = client or HomeAssistantClient(config.ha_url, config.ha_token)
-    last: list[tuple[int, int, int] | None] = [None] * len(config.lights)
-    latest = bytearray(config.channels)
+    state = stats or RuntimeStats()
+    state.configure(
+        hz=config.hz,
+        ddp_port=config.ddp_port,
+        ddp_bind=config.ddp_bind,
+        lights=list(config.lights),
+    )
+
+    lights = list(config.lights)
+    hz = config.hz
+    last: list[tuple[int, int, int] | None] = [None] * len(lights)
+    latest = bytearray(len(lights) * 3)
     dirty = False
     last_sent = 0.0
 
     sock: socket.socket | None = None
+    peer_holder: list[str | None] = [None]
     if recv is None:
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock.bind((config.ddp_bind, config.ddp_port))
-        sock.settimeout(min(0.5, config.min_interval))
+        sock.settimeout(min(0.5, 1.0 / hz if hz > 0 else 0.5))
+        state.set_listening(True)
+        state.event("info", f"DDP listening on {config.ddp_bind}:{config.ddp_port}")
 
         def recv_sock() -> bytes | None:
             try:
-                packet, _addr = sock.recvfrom(4096)
+                packet, addr = sock.recvfrom(4096)
+                peer_holder[0] = f"{addr[0]}:{addr[1]}"
                 return packet
             except socket.timeout:
                 return None
@@ -212,44 +229,83 @@ def run_bridge(
 
     print(
         f"Listening DDP on {config.ddp_bind}:{config.ddp_port} → {config.ha_url} "
-        f"({len(config.lights)} lights @ {config.hz} Hz)",
+        f"({len(lights)} lights @ {hz} Hz)",
         flush=True,
     )
-    for i, entity in enumerate(config.lights):
+    for i, entity in enumerate(lights):
         print(f"  pixel {i} → {entity}", flush=True)
 
     try:
         while True:
+            # Hot-reload lights / hz from Ingress saves
+            snap = state.snapshot()
+            snap_lights = snap["lights"]
+            snap_hz = float(snap["hz"])
+            if snap_lights != lights or snap_hz != hz:
+                lights = list(snap_lights)
+                hz = snap_hz
+                last = [None] * len(lights)
+                latest = bytearray(len(lights) * 3)
+                dirty = False
+                if sock is not None:
+                    sock.settimeout(min(0.5, 1.0 / hz if hz > 0 else 0.5))
+                print(f"Reloaded mapping: {len(lights)} lights @ {hz} Hz", flush=True)
+
             packet = recv()
             if packet is not None:
                 data = parse_ddp(packet)
                 if data is not None:
-                    chunk = data[: config.channels]
-                    if len(chunk) < config.channels:
-                        chunk = chunk + bytes(config.channels - len(chunk))
+                    peer = peer_holder[0] or "unknown"
+                    state.note_packet(peer, len(data))
+                    channels = len(lights) * 3
+                    chunk = data[:channels]
+                    if len(chunk) < channels:
+                        chunk = chunk + bytes(channels - len(chunk))
                     if chunk != latest:
                         latest[:] = chunk
                         dirty = True
 
             now = clock()
-            if not dirty or (now - last_sent) < config.min_interval:
+            min_interval = 1.0 / hz if hz > 0 else 1.0
+            if not dirty or (now - last_sent) < min_interval:
                 if sock is None and packet is None:
-                    # test mode with idle recv: avoid busy spin
                     sleep(0.01)
                 continue
 
             dirty = False
             last_sent = now
-            pixels = pixels_from_rgb(bytes(latest), len(config.lights))
-            apply_pixels(ha, config.lights, pixels, last)
+            pixels = pixels_from_rgb(bytes(latest), len(lights))
+            apply_pixels(ha, lights, pixels, last)
+            state.note_colors(pixels)
     finally:
+        state.set_listening(False)
         if sock is not None:
             sock.close()
 
 
 def main() -> None:
     config = resolve_config()
-    run_bridge(config)
+    stats = RuntimeStats()
+    stats.configure(
+        hz=config.hz,
+        ddp_port=config.ddp_port,
+        ddp_bind=config.ddp_bind,
+        lights=list(config.lights),
+    )
+
+    ingress_port = int(os.environ.get("INGRESS_PORT", "8099"))
+    try:
+        start_webui(
+            stats,
+            port=ingress_port,
+            ha_api=config.ha_url,
+            ha_token=config.ha_token,
+        )
+    except OSError as e:
+        print(f"Ingress UI failed to start: {e}", flush=True)
+        stats.event("error", f"Ingress UI failed: {e}")
+
+    run_bridge(config, stats=stats)
 
 
 if __name__ == "__main__":

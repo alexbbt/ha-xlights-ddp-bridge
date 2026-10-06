@@ -26,6 +26,15 @@ Send a one-shot DDP packet:
 PYTHONPATH=. python3 -m tests.smoke_ddp --host 127.0.0.1
 ```
 
+## Releases
+
+Merges/pushes to `main` that pass CI trigger `.github/workflows/release.yml`, which bumps `xlights_ddp_bridge/config.yaml` (and the Dockerfile label), tags `vX.Y.Z`, and creates a GitHub Release.
+
+- Default: patch bump
+- `[minor]` or `feat:` in the commit message → minor
+- `[major]` or `BREAKING CHANGE` → major
+- `[skip release]` → no release (used by the bot’s own bump commits)
+
 ## Pull requests
 
 1. Keep behavior the same unless the PR is intentionally changing it

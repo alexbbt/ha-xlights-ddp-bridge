@@ -10,6 +10,10 @@ Updates are throttled by the **`hz`** option so Wi‑Fi, cloud, or LAN smart lig
 xLights / FPP  --DDP UDP-->  this add-on  --HA API-->  light entities
 ```
 
+## Open Web UI
+
+Use **Open Web UI** on the add-on to pick lights with an entity selector, reorder pixels, watch DDP/xLights traffic, and run connection tests. The Configuration tab remains available for the same options as plain text—both paths write the same settings.
+
 ## Configuration
 
 | Option | Default | Description |
@@ -19,7 +23,7 @@ xLights / FPP  --DDP UDP-->  this add-on  --HA API-->  light entities
 | `ddp_bind` | `0.0.0.0` | Address to bind the UDP socket |
 | `lights` | example placeholders | Ordered list of light `entity_id`s (one per RGB pixel) |
 
-Replace the example `entity_id` values with your lights before starting.
+Replace the example `entity_id` values with your lights before starting (or use Open Web UI).
 
 ```yaml
 hz: 5
@@ -63,10 +67,11 @@ Add more `entity_id` rows in order for additional pixels. Any light that accepts
 
 ## Troubleshooting
 
-- **Nothing happens**: Check add-on logs for `Listening DDP…`. Test from xLights Output To Lights, or use the repo’s `tests.smoke_ddp` script against `HOMEASSISTANT_IP`.
-- **HA API errors**: Confirm the add-on is started after Core and that Supervisor API access is available (`homeassistant_api: true` in the add-on config).
-- **Works on LAN tools but not from FPP**: Firewall / VLAN—UDP from the player to Home Assistant must be allowed.
+- **Nothing happens**: Open Web UI → Status should show DDP listening and recent packets when xLights is outputting. Or check add-on logs for `Listening DDP…`.
+- **HA API errors**: Use **Test HA connection** on the Web UI. Confirm the add-on starts after Core.
+- **Works on LAN tools but not from FPP**: Firewall / VLAN—UDP from the player to Home Assistant must be allowed. Status → Last peer shows the source when packets arrive.
 - **Lag or dropped updates**: Lower `hz` (try `2`–`5`) and simplify effects on those pixels.
+- **Wrong mapping**: Reorder lights on the Web UI; pixel 0 is the first entry.
 
 ## Support
 
