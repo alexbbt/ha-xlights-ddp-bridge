@@ -1,5 +1,10 @@
 (() => {
   const $ = (id) => document.getElementById(id);
+  const version =
+    typeof window.__ADDON_VERSION__ === "string" && window.__ADDON_VERSION__
+      ? window.__ADDON_VERSION__
+      : "unknown";
+  console.log(`xLights DDP Bridge UI v${version}`);
 
   let available = [];
   let mapped = [];

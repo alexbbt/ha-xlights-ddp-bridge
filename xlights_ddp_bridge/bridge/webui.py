@@ -17,6 +17,21 @@ from .stats import RuntimeStats
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 OPTIONS_PATH = Path("/data/options.json")
+CONFIG_YAML = Path(__file__).resolve().parent.parent / "config.yaml"
+
+
+def _addon_version() -> str:
+    """Read version from add-on config.yaml (source of truth for releases)."""
+    try:
+        for line in CONFIG_YAML.read_text(encoding="utf-8").splitlines():
+            if line.startswith("version:"):
+                return line.split(":", 1)[1].strip().strip('"').strip("'")
+    except OSError:
+        pass
+    return "unknown"
+
+
+ADDON_VERSION = _addon_version()
 
 
 def _ha_request(
@@ -185,7 +200,13 @@ def make_handler(
                 if ingress:
                     parts.append(f'<base href="{ingress}/">')
                 parts.append(
-                    f"<script>window.__INGRESS_PATH__={json.dumps(ingress)};</script>"
+                    "<script>"
+                    f"window.__ADDON_VERSION__={json.dumps(ADDON_VERSION)};"
+                    f"window.__INGRESS_PATH__={json.dumps(ingress)};"
+                    "console.log("
+                    "'xLights DDP Bridge add-on v' + window.__ADDON_VERSION__"
+                    ");"
+                    "</script>"
                 )
                 html = data.decode("utf-8").replace(
                     "<!--INGRESS_SCRIPT-->", "".join(parts), 1
