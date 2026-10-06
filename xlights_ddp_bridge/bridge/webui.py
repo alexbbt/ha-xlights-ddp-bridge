@@ -208,11 +208,17 @@ def make_handler(
                     ");"
                     "</script>"
                 )
-                html = data.decode("utf-8").replace(
-                    "<!--INGRESS_SCRIPT-->", "".join(parts), 1
+                html = (
+                    data.decode("utf-8")
+                    .replace("<!--INGRESS_SCRIPT-->", "".join(parts), 1)
+                    # Cache-bust static assets with the add-on version from config.yaml
+                    .replace("__ASSET_VERSION__", ADDON_VERSION)
                 )
                 data = html.encode("utf-8")
-                print(f"Serving UI with X-Ingress-Path={ingress!r}", flush=True)
+                print(
+                    f"Serving UI v{ADDON_VERSION} with X-Ingress-Path={ingress!r}",
+                    flush=True,
+                )
             self.send_response(200)
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(data)))
