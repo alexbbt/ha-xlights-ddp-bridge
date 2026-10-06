@@ -1,6 +1,7 @@
 # xLights DDP Entity Bridge
 
 [![CI](https://github.com/alexbbt/ha-xlights-ddp-bridge/actions/workflows/ci.yml/badge.svg)](https://github.com/alexbbt/ha-xlights-ddp-bridge/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/alexbbt/ha-xlights-ddp-bridge?label=release)](https://github.com/alexbbt/ha-xlights-ddp-bridge/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 Home Assistant **Supervisor add-on** that receives [DDP](https://www.3wayplc.com/ddp-by-3way/) from **xLights** or **Falcon Player (FPP)**, maps each RGB pixel to a `light.*` entity, and pushes updates at a low, configurable rate.
