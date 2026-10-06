@@ -132,8 +132,15 @@ def make_handler(
         def log_message(self, fmt: str, *args: object) -> None:
             return  # quiet; use stats.event for important things
 
-        def _ingress_prefix(self) -> str:
-            return self.headers.get("X-Ingress-Path", "").rstrip("/")
+        def _normalize_path(self) -> str:
+            """Strip query + optional Ingress prefix; Ingress usually already strips it."""
+            path = urlparse(self.path).path
+            for header in ("X-Ingress-Path", "X-Forwarded-Prefix"):
+                prefix = (self.headers.get(header) or "").rstrip("/")
+                if prefix and path.startswith(prefix):
+                    path = path[len(prefix) :] or "/"
+                    break
+            return path
 
         def _json(self, code: int, payload: Any) -> None:
             raw = json.dumps(payload).encode()
@@ -151,7 +158,7 @@ def make_handler(
             return json.loads(self.rfile.read(length).decode())
 
         def _serve_static(self, rel: str) -> None:
-            rel = rel.lstrip("/") or "index.html"
+            rel = rel.split("?", 1)[0].lstrip("/") or "index.html"
             path = (STATIC_DIR / rel).resolve()
             if not str(path).startswith(str(STATIC_DIR.resolve())) or not path.is_file():
                 self.send_error(404)
@@ -162,28 +169,49 @@ def make_handler(
                 ctype = "application/javascript; charset=utf-8"
             elif path.suffix == ".css":
                 ctype = "text/css; charset=utf-8"
-            elif path.suffix == ".html":
-                # Inject <base> so relative API/asset URLs work under Ingress
-                prefix = self._ingress_prefix()
-                base = (prefix + "/") if prefix else "./"
-                html = data.decode("utf-8").replace(
-                    "<!--BASE-->",
-                    f'<base href="{base}" />',
-                    1,
-                )
-                data = html.encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(data)))
+            if path.suffix in {".js", ".css"}:
+                self.send_header("Cache-Control", "no-cache")
+            else:
+                self.send_header("Cache-Control", "no-store")
             self.end_headers()
             self.wfile.write(data)
 
+        def _config_payload(self) -> dict[str, Any]:
+            opts = load_options()
+            return {
+                "hz": opts.get("hz", stats.hz),
+                "ddp_port": opts.get("ddp_port", stats.ddp_port),
+                "ddp_bind": opts.get("ddp_bind", stats.ddp_bind),
+                "lights": [
+                    item["entity_id"] if isinstance(item, dict) else str(item)
+                    for item in opts.get("lights", [])
+                ],
+            }
+
+        def _available_lights(self) -> tuple[int, Any]:
+            code, data = _ha_request(ha_api, ha_token, "/states")
+            if code >= 400 or not isinstance(data, list):
+                return (code if code >= 400 else 502), {"error": data}
+            lights = []
+            for ent in data:
+                eid = ent.get("entity_id", "")
+                if not eid.startswith("light."):
+                    continue
+                lights.append(
+                    {
+                        "entity_id": eid,
+                        "name": ent.get("attributes", {}).get("friendly_name") or eid,
+                        "state": ent.get("state"),
+                    }
+                )
+            lights.sort(key=lambda x: x["name"].lower())
+            return 200, {"lights": lights}
+
         def do_GET(self) -> None:  # noqa: N802
-            parsed = urlparse(self.path)
-            path = parsed.path
-            prefix = self._ingress_prefix()
-            if prefix and path.startswith(prefix):
-                path = path[len(prefix) :] or "/"
+            path = self._normalize_path()
 
             if path in ("/", "/index.html"):
                 self._serve_static("index.html")
@@ -191,60 +219,25 @@ def make_handler(
             if path.startswith("/static/"):
                 self._serve_static(path[len("/static/") :])
                 return
-            if path == "/api/status":
+            # Prefer /bridge/* (does not collide with HA Core /api/* if mis-routed)
+            if path in ("/bridge/status", "/api/status"):
                 self._json(200, stats.snapshot())
                 return
-            if path == "/api/config":
-                opts = load_options()
-                self._json(
-                    200,
-                    {
-                        "hz": opts.get("hz", stats.hz),
-                        "ddp_port": opts.get("ddp_port", stats.ddp_port),
-                        "ddp_bind": opts.get("ddp_bind", stats.ddp_bind),
-                        "lights": [
-                            item["entity_id"]
-                            if isinstance(item, dict)
-                            else str(item)
-                            for item in opts.get("lights", [])
-                        ],
-                    },
-                )
+            if path in ("/bridge/config", "/api/config"):
+                self._json(200, self._config_payload())
                 return
-            if path == "/api/lights/available":
-                code, data = _ha_request(ha_api, ha_token, "/states")
-                if code >= 400 or not isinstance(data, list):
-                    self._json(code if code >= 400 else 502, {"error": data})
-                    return
-                lights = []
-                for ent in data:
-                    eid = ent.get("entity_id", "")
-                    if not eid.startswith("light."):
-                        continue
-                    lights.append(
-                        {
-                            "entity_id": eid,
-                            "name": ent.get("attributes", {}).get("friendly_name")
-                            or eid,
-                            "state": ent.get("state"),
-                        }
-                    )
-                lights.sort(key=lambda x: x["name"].lower())
-                self._json(200, {"lights": lights})
+            if path in ("/bridge/lights/available", "/api/lights/available"):
+                code, payload = self._available_lights()
+                self._json(code, payload)
                 return
 
             self.send_error(404)
 
         def do_POST(self) -> None:  # noqa: N802
-            parsed = urlparse(self.path)
-            path = parsed.path
-            prefix = self._ingress_prefix()
-            if prefix and path.startswith(prefix):
-                path = path[len(prefix) :] or "/"
-
+            path = self._normalize_path()
             body = self._read_json()
 
-            if path == "/api/config":
+            if path in ("/bridge/config", "/api/config"):
                 lights = [str(x) for x in body.get("lights", []) if str(x).strip()]
                 hz = float(body.get("hz", stats.hz))
                 if hz < 0.1 or hz > 60:
@@ -263,7 +256,6 @@ def make_handler(
                         self._json(502, {"error": msg})
                         return
                 else:
-                    # Local/dev: update env-backed options file if present
                     try:
                         OPTIONS_PATH.parent.mkdir(parents=True, exist_ok=True)
                         OPTIONS_PATH.write_text(
@@ -276,7 +268,7 @@ def make_handler(
                 self._json(200, {"ok": True, "lights": lights, "hz": hz})
                 return
 
-            if path == "/api/test/ha":
+            if path in ("/bridge/test/ha", "/api/test/ha"):
                 code, data = _ha_request(ha_api, ha_token, "/")
                 if code >= 400:
                     stats.note_ha_check(False)
@@ -305,7 +297,7 @@ def make_handler(
                 )
                 return
 
-            if path == "/api/test/pulse":
+            if path in ("/bridge/test/pulse", "/api/test/pulse"):
                 colors = body.get("rgb", [255, 255, 255])
                 if (
                     not isinstance(colors, list)
@@ -320,12 +312,10 @@ def make_handler(
                 if not lights:
                     self._json(400, {"error": "No lights configured"})
                     return
-                # Apply via HA directly
-                client_base = ha_api
                 for eid in lights:
                     if r == 0 and g == 0 and b == 0:
                         _ha_request(
-                            client_base,
+                            ha_api,
                             ha_token,
                             "/services/light/turn_off",
                             method="POST",
@@ -333,7 +323,7 @@ def make_handler(
                         )
                     else:
                         _ha_request(
-                            client_base,
+                            ha_api,
                             ha_token,
                             "/services/light/turn_on",
                             method="POST",

@@ -4,18 +4,29 @@
   let available = [];
   let mapped = [];
 
-  // Under Home Assistant Ingress, absolute "/api/..." hits Core — stay relative to <base>.
+  /**
+   * Home Assistant Ingress serves this UI under
+   * /api/hassio_ingress/<token>/... — never call origin-absolute "/api/..."
+   * (that hits Home Assistant Core: 401/404).
+   */
+  function ingressRoot() {
+    const path = window.location.pathname || "/";
+    const m = path.match(/^(.*?\/api\/hassio_ingress\/[^/]+)/);
+    if (m) return m[1];
+    // Local / non-ingress: directory containing this page
+    if (path.endsWith("/")) return path.replace(/\/$/, "") || "";
+    return path.replace(/\/[^/]*$/, "");
+  }
+
   function apiUrl(path) {
+    const root = ingressRoot();
     const cleaned = String(path).replace(/^\/+/, "");
-    try {
-      return new URL(cleaned, document.baseURI).toString();
-    } catch {
-      return cleaned;
-    }
+    return `${root}/${cleaned}`;
   }
 
   function api(path, opts = {}) {
-    return fetch(apiUrl(path), {
+    const url = apiUrl(path);
+    return fetch(url, {
       headers: { "Content-Type": "application/json", ...(opts.headers || {}) },
       ...opts,
     }).then(async (r) => {
@@ -25,12 +36,14 @@
         data = text ? JSON.parse(text) : {};
       } catch {
         throw new Error(
-          `Unexpected response (${r.status}). If this is the Ingress UI, rebuild/update the add-on.`
+          `Bad response from ${url} (${r.status}). Rebuild the add-on and hard-refresh.`
         );
       }
       if (!r.ok) {
         const err = data.error || data.message || r.statusText || `HTTP ${r.status}`;
-        throw new Error(typeof err === "string" ? err : JSON.stringify(err));
+        throw new Error(
+          `${typeof err === "string" ? err : JSON.stringify(err)} [${url}]`
+        );
       }
       return data;
     });
@@ -163,7 +176,7 @@
 
   async function refreshStatus() {
     try {
-      const s = await api("api/status");
+      const s = await api("bridge/status");
       renderStatus(s);
     } catch (e) {
       $("status").textContent = String(e.message || e);
@@ -172,8 +185,8 @@
 
   async function load() {
     const [cfg, avail] = await Promise.all([
-      api("api/config"),
-      api("api/lights/available"),
+      api("bridge/config"),
+      api("bridge/lights/available"),
     ]);
     $("hz").value = cfg.hz;
     mapped = cfg.lights || [];
@@ -188,7 +201,7 @@
   $("save").onclick = async () => {
     $("saveMsg").textContent = "Saving…";
     try {
-      await api("api/config", {
+      await api("bridge/config", {
         method: "POST",
         body: JSON.stringify({
           lights: mapped,
@@ -205,7 +218,7 @@
   $("testHa").onclick = async () => {
     $("testOut").textContent = "Testing…";
     try {
-      const r = await api("api/test/ha", { method: "POST", body: "{}" });
+      const r = await api("bridge/test/ha", { method: "POST", body: "{}" });
       $("testOut").textContent = JSON.stringify(r, null, 2);
       await refreshStatus();
     } catch (e) {
@@ -216,7 +229,7 @@
   $("pulseWhite").onclick = async () => {
     $("testOut").textContent = "Pulsing…";
     try {
-      const r = await api("api/test/pulse", {
+      const r = await api("bridge/test/pulse", {
         method: "POST",
         body: JSON.stringify({ rgb: [255, 255, 255] }),
       });
@@ -229,7 +242,7 @@
 
   $("pulseOff").onclick = async () => {
     try {
-      const r = await api("api/test/pulse", {
+      const r = await api("bridge/test/pulse", {
         method: "POST",
         body: JSON.stringify({ rgb: [0, 0, 0] }),
       });
