@@ -30,9 +30,11 @@ jobs:
         run: |
           set -euo pipefail
           MSG=$(git log -1 --pretty=%B)
-          echo "commit_msg<<EOF" >> "$GITHUB_OUTPUT"
-          echo "$MSG" >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
+          {
+            echo "commit_msg<<EOF"
+            echo "$MSG"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
           if echo "$MSG" | grep -Eqi '\[skip release\]'; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
           else
@@ -53,7 +55,7 @@ jobs:
             echo "type=patch" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Bump version files
+      - name: Bump version and write changelog
         if: steps.skip.outputs.skip != 'true'
         id: version
         run: |
@@ -81,21 +83,101 @@ jobs:
           sed -i -E "s/^version: .*/version: \"${NEW}\"/" "$CONFIG"
           sed -i -E "s/io.hass.version=\"[^\"]+\"/io.hass.version=\"${NEW}\"/" "$DOCKER"
 
-          SUBJECT=$(git log -1 --pretty=%s)
-          SHA=$(git rev-parse --short HEAD)
+          # Commits since previous release tag (fallback: last 20 on main)
+          PREV_TAG=$(git describe --tags --abbrev=0 --match 'v*' HEAD 2>/dev/null || true)
+          if [ -n "${PREV_TAG}" ]; then
+            RANGE="${PREV_TAG}..HEAD"
+          else
+            RANGE="HEAD~20..HEAD"
+          fi
+
+          # Collect user-facing commits; drop bot release bumps
+          mapfile -t COMMITS < <(
+            git log "${RANGE}" --pretty=format:'%h%x09%s' --no-merges \
+              | grep -Eiv $'^[0-9a-f]+\tchore: release v' \
+              | grep -Eiv $'\\[skip release\\]' \
+              || true
+          )
+
+          FEATURES=()
+          FIXES=()
+          DOCS=()
+          OTHER=()
+
+          clean_subject() {
+            local s="$1"
+            s=$(echo "$s" | sed -E 's/[[:space:]]*\[(major|minor|skip release)\][[:space:]]*//Ig')
+            s=$(echo "$s" | sed -E 's/^(feat|fix|docs|chore|refactor|perf|test|build|ci)(\([^)]*\))?!?:[[:space:]]*//I')
+            echo "$s" | sed -E 's/[[:space:]]+$//'
+          }
+
+          for line in "${COMMITS[@]+"${COMMITS[@]}"}"; do
+            [ -z "${line}" ] && continue
+            SHA="${line%%	*}"
+            SUBJECT="${line#*	}"
+            CLEAN=$(clean_subject "${SUBJECT}")
+            [ -z "${CLEAN}" ] && continue
+            BULLET="- ${CLEAN} (\`${SHA}\`)"
+            if echo "${SUBJECT}" | grep -Eqi '^(feat|feature)(\(|:)|\[minor\]'; then
+              FEATURES+=("${BULLET}")
+            elif echo "${SUBJECT}" | grep -Eqi '^(fix)(\(|:)|bugfix|hotfix'; then
+              FIXES+=("${BULLET}")
+            elif echo "${SUBJECT}" | grep -Eqi '^(docs?)(\(|:)|readme|documentation'; then
+              DOCS+=("${BULLET}")
+            else
+              OTHER+=("${BULLET}")
+            fi
+          done
+
+          if [ ${#FEATURES[@]} -eq 0 ] && [ ${#FIXES[@]} -eq 0 ] && [ ${#DOCS[@]} -eq 0 ] && [ ${#OTHER[@]} -eq 0 ]; then
+            SHA=$(git rev-parse --short HEAD)
+            SUBJECT=$(clean_subject "$(git log -1 --pretty=%s)")
+            OTHER+=("- ${SUBJECT} (\`${SHA}\`)")
+          fi
+
+          {
+            echo "## ${NEW}"
+            echo
+            if [ ${#FEATURES[@]} -gt 0 ]; then
+              echo "### Features"
+              echo
+              printf '%s\n' "${FEATURES[@]}"
+              echo
+            fi
+            if [ ${#FIXES[@]} -gt 0 ]; then
+              echo "### Fixes"
+              echo
+              printf '%s\n' "${FIXES[@]}"
+              echo
+            fi
+            if [ ${#DOCS[@]} -gt 0 ]; then
+              echo "### Documentation"
+              echo
+              printf '%s\n' "${DOCS[@]}"
+              echo
+            fi
+            if [ ${#OTHER[@]} -gt 0 ]; then
+              echo "### Changes"
+              echo
+              printf '%s\n' "${OTHER[@]}"
+              echo
+            fi
+          } > /tmp/changelog-section.md
+
           if ! grep -qE "^## ${NEW}$" CHANGELOG.md; then
-            BODY=$(awk 'BEGIN{p=0} /^# Changelog/{next} {print}' CHANGELOG.md)
+            BODY=$(awk '/^# Changelog/{next} {print}' CHANGELOG.md)
             {
               echo "# Changelog"
               echo
-              echo "## ${NEW}"
-              echo
-              echo "- ${SUBJECT} (\`${SHA}\`)"
-              echo
-              printf '%s\n' "$BODY"
+              cat /tmp/changelog-section.md
+              printf '%s\n' "${BODY}"
             } > CHANGELOG.md.tmp
             mv CHANGELOG.md.tmp CHANGELOG.md
           fi
+
+          cp /tmp/changelog-section.md /tmp/release-notes.md
+          # Soften heading for GitHub release body (title already has version)
+          sed -i -E "1s/^## ${NEW}$/## What's changed/" /tmp/release-notes.md
 
       - name: Commit, tag, and release
         if: steps.skip.outputs.skip != 'true' && steps.version.outputs.exists != 'true'
@@ -112,11 +194,15 @@ jobs:
           git tag "v${NEW}"
           git push origin "v${NEW}"
 
-          NOTES=$(awk -v ver="## ${NEW}" '
-            $0 == ver {capture=1; next}
-            capture && /^## / {exit}
-            capture {print}
-          ' CHANGELOG.md)
+          if [ -f /tmp/release-notes.md ]; then
+            NOTES=$(cat /tmp/release-notes.md)
+          else
+            NOTES=$(awk -v ver="## ${NEW}" '
+              $0 == ver {capture=1; next}
+              capture && /^## / {exit}
+              capture {print}
+            ' CHANGELOG.md)
+          fi
           if [ -z "${NOTES// }" ]; then
             NOTES="Release v${NEW}"
           fi
