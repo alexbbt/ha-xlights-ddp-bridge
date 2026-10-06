@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.10
+
+### Changes
+
+- Fix Ingress UI stuck on cached app.js with Core /api calls. (`ba74853`)
+
+
 ## 0.2.9
 
 ### Changes
