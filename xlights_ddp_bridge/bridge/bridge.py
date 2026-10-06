@@ -50,6 +50,8 @@ def pixels_from_rgb(data: bytes, count: int) -> list[tuple[int, int, int]]:
 
 @dataclass(frozen=True)
 class BridgeConfig:
+    """Runtime configuration for the DDP → HA bridge."""
+
     hz: float
     ddp_port: int
     ddp_bind: str
@@ -59,17 +61,22 @@ class BridgeConfig:
 
     @property
     def channels(self) -> int:
+        """Total RGB channels (= 3 × light count)."""
         return len(self.lights) * 3
 
     @property
     def min_interval(self) -> float:
+        """Minimum seconds between HA update batches."""
         return 1.0 / self.hz if self.hz > 0 else 1.0
 
 
 def load_config_from_env() -> BridgeConfig:
-    """Load config from environment (add-on run.sh or local smoke)."""
+    """Load config from environment (add-on run.sh or local development)."""
     lights_raw = os.environ.get("LIGHTS_JSON", "[]")
-    lights = tuple(json.loads(lights_raw))
+    parsed = json.loads(lights_raw)
+    if not isinstance(parsed, list):
+        raise SystemExit("LIGHTS_JSON must be a JSON array of entity_id strings")
+    lights = tuple(str(item) for item in parsed)
     if not lights:
         raise SystemExit("No lights configured (LIGHTS_JSON empty)")
 
@@ -79,10 +86,7 @@ def load_config_from_env() -> BridgeConfig:
         raise SystemExit("HA_URL and HA_TOKEN are required")
 
     # Normalize: accept base with or without /api
-    if ha_url.endswith("/api"):
-        api_base = ha_url
-    else:
-        api_base = f"{ha_url}/api"
+    api_base = ha_url if ha_url.endswith("/api") else f"{ha_url}/api"
 
     return BridgeConfig(
         hz=float(os.environ.get("HZ", "5")),
@@ -96,8 +100,10 @@ def load_config_from_env() -> BridgeConfig:
 
 def load_config_from_options(path: Path | str = "/data/options.json") -> BridgeConfig:
     """Load Supervisor add-on options + SUPERVISOR_TOKEN."""
-    options = json.loads(Path(path).read_text())
-    lights = tuple(item["entity_id"] for item in options.get("lights", []))
+    options = json.loads(Path(path).read_text(encoding="utf-8"))
+    lights = tuple(str(item["entity_id"]) for item in options.get("lights", []))
+    if not lights:
+        raise SystemExit("No lights configured in options.json")
     token = os.environ.get("SUPERVISOR_TOKEN", "").strip()
     if not token:
         raise SystemExit("SUPERVISOR_TOKEN missing (not running as add-on?)")
@@ -112,6 +118,7 @@ def load_config_from_options(path: Path | str = "/data/options.json") -> BridgeC
 
 
 def resolve_config() -> BridgeConfig:
+    """Prefer Supervisor options when present; otherwise use environment vars."""
     options = Path("/data/options.json")
     if options.is_file() and os.environ.get("SUPERVISOR_TOKEN"):
         return load_config_from_options(options)
@@ -119,12 +126,15 @@ def resolve_config() -> BridgeConfig:
 
 
 class HomeAssistantClient:
+    """Minimal Home Assistant REST client for light.turn_on / turn_off."""
+
     def __init__(self, api_base: str, token: str, timeout: float = 4.0) -> None:
         self.api_base = api_base.rstrip("/")
         self.token = token
         self.timeout = timeout
 
-    def call_light(self, service: str, payload: dict) -> None:
+    def call_light(self, service: str, payload: dict[str, object]) -> None:
+        """Call a `light` domain service; log errors without raising."""
         req = urllib.request.Request(
             f"{self.api_base}/services/light/{service}",
             data=json.dumps(payload).encode(),
@@ -140,7 +150,7 @@ class HomeAssistantClient:
         except urllib.error.HTTPError as e:
             body = e.read()[:200]
             print(f"HA light.{service} HTTP {e.code}: {body!r}", flush=True)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — keep bridge loop alive on network blips
             print(f"HA light.{service} error: {e}", flush=True)
 
 

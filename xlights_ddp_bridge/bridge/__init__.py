@@ -1,3 +1,7 @@
-"""xLights DDP → Home Assistant light entity bridge."""
+"""xLights DDP → Home Assistant light entity bridge package."""
+
+from __future__ import annotations
+
+__all__ = ["__version__"]
 
 __version__ = "0.1.0"
