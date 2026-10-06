@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.12
+
+### Changes
+
+- Fix Save when Ingress drops the POST body. (`245541f`)
+
+
 ## 0.2.11
 
 ### Changes
