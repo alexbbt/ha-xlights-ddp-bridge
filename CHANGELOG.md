@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.2
+
+- Fix Ingress Web UI API paths under Home Assistant proxy. (`f672e51`)
+
+
 ## 0.2.1
 
 - Add GitHub release version badge to README. (`67358bc`)
