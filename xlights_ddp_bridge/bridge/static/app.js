@@ -4,7 +4,14 @@
     typeof window.__ADDON_VERSION__ === "string" && window.__ADDON_VERSION__
       ? window.__ADDON_VERSION__
       : "unknown";
-  console.log(`xLights DDP Bridge UI v${version}`);
+  const assetVersion =
+    typeof window.__ASSET_VERSION__ === "string" ? window.__ASSET_VERSION__ : "";
+  console.log(
+    `xLights DDP Bridge UI v${version}`,
+    assetVersion ? `(assets ${assetVersion})` : "",
+    "ingress=",
+    window.__INGRESS_PATH__ || "(none)"
+  );
 
   let available = [];
   let mapped = [];
@@ -30,11 +37,26 @@
     const path = window.location.pathname || "/";
     const m = path.match(/^(.*?\/api\/hassio_ingress\/[^/]+)/);
     if (m) return m[1];
+    // Sidebar panel URL is /app/<slug> — iframe src still has hassio_ingress
+    try {
+      if (window.frameElement && window.frameElement.src) {
+        const iframePath = new URL(window.frameElement.src, window.location.origin)
+          .pathname;
+        const im = iframePath.match(/^(.*?\/api\/hassio_ingress\/[^/]+)/);
+        if (im) return im[1];
+      }
+    } catch {
+      /* cross-origin — ignore */
+    }
     return "";
   }
 
   function apiUrl(path) {
-    const cleaned = String(path).replace(/^\/+/, "");
+    let cleaned = String(path).replace(/^\/+/, "");
+    // Old bundles called "/api/status"; map to bridge/* under ingress
+    if (cleaned === "api/status" || cleaned.startsWith("api/")) {
+      cleaned = cleaned.replace(/^api\//, "bridge/");
+    }
     const base = bridgeBase();
     // Absolute under ingress when known; else relative (honors <base href>)
     return base ? `${base}/${cleaned}` : cleaned;

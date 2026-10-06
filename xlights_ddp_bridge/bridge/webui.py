@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import threading
@@ -17,21 +18,48 @@ from .stats import RuntimeStats
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 OPTIONS_PATH = Path("/data/options.json")
-CONFIG_YAML = Path(__file__).resolve().parent.parent / "config.yaml"
+_PKG_ROOT = Path(__file__).resolve().parent.parent
+CONFIG_YAML_CANDIDATES = (
+    _PKG_ROOT / "config.yaml",
+    Path("/opt/xlights_ddp_bridge/config.yaml"),
+)
+
+
+def _parse_version_line(text: str) -> str | None:
+    for line in text.splitlines():
+        if line.startswith("version:"):
+            return line.split(":", 1)[1].strip().strip('"').strip("'")
+    return None
 
 
 def _addon_version() -> str:
-    """Read version from add-on config.yaml (source of truth for releases)."""
-    try:
-        for line in CONFIG_YAML.read_text(encoding="utf-8").splitlines():
-            if line.startswith("version:"):
-                return line.split(":", 1)[1].strip().strip('"').strip("'")
-    except OSError:
-        pass
+    """Resolve add-on version inside the container (config.yaml / env)."""
+    env = (os.environ.get("ADDON_VERSION") or "").strip()
+    if env and env != "unknown":
+        return env
+    for path in CONFIG_YAML_CANDIDATES:
+        try:
+            parsed = _parse_version_line(path.read_text(encoding="utf-8"))
+            if parsed:
+                return parsed
+        except OSError:
+            continue
     return "unknown"
 
 
+def _asset_version(addon_version: str) -> str:
+    """Cache-bust query value: release version + short hash of static assets."""
+    h = hashlib.sha256()
+    for name in ("app.js", "style.css", "index.html"):
+        path = STATIC_DIR / name
+        if path.is_file():
+            h.update(path.read_bytes())
+    digest = h.hexdigest()[:8]
+    return f"{addon_version}-{digest}"
+
+
 ADDON_VERSION = _addon_version()
+ASSET_VERSION = _asset_version(ADDON_VERSION)
 
 
 def _ha_request(
@@ -188,12 +216,19 @@ def make_handler(
                 return
             data = path.read_bytes()
             ctype = "text/html; charset=utf-8"
+            ingress = self._ingress_path()
             if path.suffix == ".js":
                 ctype = "application/javascript; charset=utf-8"
+                # Per-request ingress prefix so cached HTML cannot strand an old bundle
+                prefix = (
+                    f"window.__ADDON_VERSION__={json.dumps(ADDON_VERSION)};"
+                    f"window.__INGRESS_PATH__={json.dumps(ingress)};"
+                    f"window.__ASSET_VERSION__={json.dumps(ASSET_VERSION)};\n"
+                )
+                data = prefix.encode("utf-8") + data
             elif path.suffix == ".css":
                 ctype = "text/css; charset=utf-8"
             elif path.suffix == ".html":
-                ingress = self._ingress_path()
                 # <base> makes relative fetch("bridge/...") and static/* resolve under
                 # /api/hassio_ingress/<token>/ instead of HA Core /api/.
                 parts: list[str] = []
@@ -203,26 +238,30 @@ def make_handler(
                     "<script>"
                     f"window.__ADDON_VERSION__={json.dumps(ADDON_VERSION)};"
                     f"window.__INGRESS_PATH__={json.dumps(ingress)};"
+                    f"window.__ASSET_VERSION__={json.dumps(ASSET_VERSION)};"
                     "console.log("
-                    "'xLights DDP Bridge add-on v' + window.__ADDON_VERSION__"
+                    "'xLights DDP Bridge add-on v' + window.__ADDON_VERSION__,"
+                    "'asset', window.__ASSET_VERSION__,"
+                    "'ingress', window.__INGRESS_PATH__ || '(none)'"
                     ");"
                     "</script>"
                 )
                 html = (
                     data.decode("utf-8")
                     .replace("<!--INGRESS_SCRIPT-->", "".join(parts), 1)
-                    # Cache-bust static assets with the add-on version from config.yaml
-                    .replace("__ASSET_VERSION__", ADDON_VERSION)
+                    .replace("__ASSET_VERSION__", ASSET_VERSION)
                 )
                 data = html.encode("utf-8")
                 print(
-                    f"Serving UI v{ADDON_VERSION} with X-Ingress-Path={ingress!r}",
+                    f"Serving UI v{ADDON_VERSION} asset={ASSET_VERSION} "
+                    f"X-Ingress-Path={ingress!r}",
                     flush=True,
                 )
             self.send_response(200)
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(data)))
-            self.send_header("Cache-Control", "no-store")
+            self.send_header("Cache-Control", "no-store, no-cache, must-revalidate")
+            self.send_header("Pragma", "no-cache")
             self.end_headers()
             self.wfile.write(data)
 

@@ -82,7 +82,8 @@ jobs:
 
           sed -i -E "s/^version: .*/version: \"${NEW}\"/" "$CONFIG"
           sed -i -E "s/io.hass.version=\"[^\"]+\"/io.hass.version=\"${NEW}\"/" "$DOCKER"
-          # Static UI assets use ?v=__ASSET_VERSION__, rewritten at serve time from config.yaml
+          sed -i -E "s/^ARG BUILD_VERSION=.*/ARG BUILD_VERSION=${NEW}/" "$DOCKER"
+          # Static UI ?v=__ASSET_VERSION__ is filled at serve time (version + asset hash)
 
           # Commits since previous release tag (fallback: last 20 on main)
           PREV_TAG=$(git describe --tags --abbrev=0 --match 'v*' HEAD 2>/dev/null || true)

@@ -5,10 +5,16 @@ RUN apk add --no-cache python3
 
 WORKDIR /opt/xlights_ddp_bridge
 
+# config.yaml is required at runtime so the Web UI can report / cache-bust by version.
+# (Supervisor reads it from the repo; the container did not previously include it.)
+COPY config.yaml /opt/xlights_ddp_bridge/config.yaml
 COPY bridge /opt/xlights_ddp_bridge/bridge
 COPY run.sh /run.sh
 
 RUN chmod a+x /run.sh
+
+ARG BUILD_VERSION=0.2.9
+ENV ADDON_VERSION=${BUILD_VERSION}
 
 LABEL \
   io.hass.name="xLights DDP Entity Bridge" \
