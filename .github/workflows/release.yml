@@ -165,15 +165,17 @@ jobs:
             fi
           } > /tmp/changelog-section.md
 
-          if ! grep -qE "^## ${NEW}$" CHANGELOG.md; then
-            BODY=$(awk '/^# Changelog/{next} {print}' CHANGELOG.md)
+          # Supervisor only serves CHANGELOG.md from inside the add-on folder
+          CHANGELOG=xlights_ddp_bridge/CHANGELOG.md
+          if ! grep -qE "^## ${NEW}$" "$CHANGELOG"; then
+            BODY=$(awk '/^# Changelog/{next} {print}' "$CHANGELOG")
             {
               echo "# Changelog"
               echo
               cat /tmp/changelog-section.md
               printf '%s\n' "${BODY}"
-            } > CHANGELOG.md.tmp
-            mv CHANGELOG.md.tmp CHANGELOG.md
+            } > "${CHANGELOG}.tmp"
+            mv "${CHANGELOG}.tmp" "$CHANGELOG"
           fi
 
           cp /tmp/changelog-section.md /tmp/release-notes.md
@@ -189,7 +191,7 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add xlights_ddp_bridge/config.yaml xlights_ddp_bridge/Dockerfile CHANGELOG.md
+          git add xlights_ddp_bridge/config.yaml xlights_ddp_bridge/Dockerfile xlights_ddp_bridge/CHANGELOG.md
           git commit -m "chore: release v${NEW} [skip release]"
           git push origin main
           git tag "v${NEW}"
@@ -202,7 +204,7 @@ jobs:
               $0 == ver {capture=1; next}
               capture && /^## / {exit}
               capture {print}
-            ' CHANGELOG.md)
+            ' xlights_ddp_bridge/CHANGELOG.md)
           fi
           if [ -z "${NOTES// }" ]; then
             NOTES="Release v${NEW}"

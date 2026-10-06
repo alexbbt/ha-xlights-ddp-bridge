@@ -28,7 +28,7 @@ PYTHONPATH=. python3 -m tests.smoke_ddp --host 127.0.0.1
 
 ## Releases
 
-Merges/pushes to `main` that pass CI trigger `.github/workflows/release.yml`, which bumps `xlights_ddp_bridge/config.yaml` (and the Dockerfile label), writes `CHANGELOG.md`, tags `vX.Y.Z`, and creates a GitHub Release.
+Merges/pushes to `main` that pass CI trigger `.github/workflows/release.yml`, which bumps `xlights_ddp_bridge/config.yaml` (and the Dockerfile label), writes `xlights_ddp_bridge/CHANGELOG.md` (where Supervisor looks for release notes), tags `vX.Y.Z`, and creates a GitHub Release.
 
 - Default: patch bump
 - `[minor]` or `feat:` in the commit message → minor
