@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.4
+
+### Changes
+
+- Improve auto-release changelogs with grouped commit history. (`9b1aacb`)
+
+
 ## 0.2.3
 
 - Fix Ingress fetches by deriving hassio_ingress base from location. (`6644176`)
