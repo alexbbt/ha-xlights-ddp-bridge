@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.1
+
+- Add GitHub release version badge to README. (`67358bc`)
+
+
 ## 0.2.0
 
 - Add Ingress UI with entity picker, diagnostics, and auto-releases [minor] (`9ed0b79`)

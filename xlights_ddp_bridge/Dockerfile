@@ -14,7 +14,7 @@ LABEL \
   io.hass.name="xLights DDP Entity Bridge" \
   io.hass.description="DDP from xLights/FPP to Home Assistant light entities" \
   io.hass.type="addon" \
-  io.hass.version="0.2.0" \
+  io.hass.version="0.2.1" \
   io.hass.arch="aarch64|amd64"
 
 CMD ["/run.sh"]
