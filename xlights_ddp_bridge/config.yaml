@@ -1,5 +1,5 @@
 name: xLights DDP Entity Bridge
-version: "0.2.7"
+version: "0.2.8"
 slug: xlights_ddp_bridge
 description: >-
   Receive DDP from xLights or Falcon Player and map RGB pixels to Home

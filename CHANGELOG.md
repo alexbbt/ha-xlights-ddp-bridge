@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.8
+
+### Changes
+
+- Stamp Web UI asset cache-busters from the add-on version at serve time. (`7b153f7`)
+
+
 ## 0.2.7
 
 ### Changes
