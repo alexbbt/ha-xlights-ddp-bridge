@@ -132,7 +132,7 @@ Unit tests (no Home Assistant required):
 
 ```bash
 cd xlights_ddp_bridge
-python3 -m unittest discover -s tests -v
+PYTHONPATH=. python3 -m unittest discover -s tests -v
 ```
 
 ## Contributing

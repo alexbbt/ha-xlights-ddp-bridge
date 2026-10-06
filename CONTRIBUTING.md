@@ -8,7 +8,7 @@ You need Python 3.11+ (3.12/3.13 fine). No Home Assistant install is required fo
 
 ```bash
 cd xlights_ddp_bridge
-python3 -m unittest discover -s tests -v
+PYTHONPATH=. python3 -m unittest discover -s tests -v
 ```
 
 Optional local bridge (talks to a real HA instance):

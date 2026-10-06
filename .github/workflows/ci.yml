@@ -26,4 +26,6 @@ jobs:
 
       - name: Run unit tests
         working-directory: xlights_ddp_bridge
+        env:
+          PYTHONPATH: .
         run: python3 -m unittest discover -s tests -v

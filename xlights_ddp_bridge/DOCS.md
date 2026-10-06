@@ -71,4 +71,5 @@ Add more `entity_id` rows in order for additional pixels. Any light that accepts
 ## Support
 
 - Source and issues: [github.com/alexbbt/ha-xlights-ddp-bridge](https://github.com/alexbbt/ha-xlights-ddp-bridge)
-- License: MIT
+- Contributing: see the repository [CONTRIBUTING.md](https://github.com/alexbbt/ha-xlights-ddp-bridge/blob/main/CONTRIBUTING.md)
+- License: [MIT](https://github.com/alexbbt/ha-xlights-ddp-bridge/blob/main/LICENSE)
