@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.11
+
+### Changes
+
+- Fix Ingress UI script SyntaxError and bust stale app.js caches. (`4822be0`)
+
+
 ## 0.2.10
 
 ### Changes

@@ -13,14 +13,14 @@ COPY run.sh /run.sh
 
 RUN chmod a+x /run.sh
 
-ARG BUILD_VERSION=0.2.10
+ARG BUILD_VERSION=0.2.11
 ENV ADDON_VERSION=${BUILD_VERSION}
 
 LABEL \
   io.hass.name="xLights DDP Entity Bridge" \
   io.hass.description="DDP from xLights/FPP to Home Assistant light entities" \
   io.hass.type="addon" \
-  io.hass.version="0.2.10" \
+  io.hass.version="0.2.11" \
   io.hass.arch="aarch64|amd64"
 
 CMD ["/run.sh"]
