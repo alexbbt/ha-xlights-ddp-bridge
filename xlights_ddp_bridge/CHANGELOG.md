@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.9
+
+### Changes
+
+- Put CHANGELOG.md in the add-on folder for Supervisor release notes. (`aa70f26`)
+
+
 ## 0.2.8
 
 ### Changes
