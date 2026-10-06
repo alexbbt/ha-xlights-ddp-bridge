@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.3
+
+- Fix Ingress fetches by deriving hassio_ingress base from location. (`6644176`)
+
+
 ## 0.2.2
 
 - Fix Ingress Web UI API paths under Home Assistant proxy. (`f672e51`)
