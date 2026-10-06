@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.6
+
+### Changes
+
+- Force Ingress API routing with injected <base href>. (`b46b9bb`)
+
+
 ## 0.2.5
 
 ### Changes
