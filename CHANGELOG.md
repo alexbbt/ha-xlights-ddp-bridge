@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.0
+
+- Add Ingress UI with entity picker, diagnostics, and auto-releases [minor] (`9ed0b79`)
+
+
 ## 0.1.0
 
 - Initial add-on: DDP listener, configurable `hz`, ordered `lights` entity mapping
