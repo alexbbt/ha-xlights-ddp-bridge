@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import threading
 import time
 import urllib.error
@@ -13,6 +14,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import urlparse
+
+# Path-based cache bust (query strings are often ignored by CDN / browser caches)
+_VERSIONED_JS = re.compile(r"^app(?:\.[^/]+)?\.js$")
+_VERSIONED_CSS = re.compile(r"^style(?:\.[^/]+)?\.css$")
 
 from .stats import RuntimeStats
 
@@ -210,6 +215,11 @@ def make_handler(
 
         def _serve_static(self, rel: str) -> None:
             rel = rel.split("?", 1)[0].lstrip("/") or "index.html"
+            # Map static/app.<ver>.js → app.js (path busts caches that ignore ?v=)
+            if _VERSIONED_JS.match(rel):
+                rel = "app.js"
+            elif _VERSIONED_CSS.match(rel):
+                rel = "style.css"
             path = (STATIC_DIR / rel).resolve()
             if not str(path).startswith(str(STATIC_DIR.resolve())) or not path.is_file():
                 self.send_error(404)
@@ -219,38 +229,42 @@ def make_handler(
             ingress = self._ingress_path()
             if path.suffix == ".js":
                 ctype = "application/javascript; charset=utf-8"
-                # Per-request ingress prefix so cached HTML cannot strand an old bundle
+                # Per-request ingress prefix (must not collide with HTML placeholders)
                 prefix = (
-                    f"window.__ADDON_VERSION__={json.dumps(ADDON_VERSION)};"
-                    f"window.__INGRESS_PATH__={json.dumps(ingress)};"
-                    f"window.__ASSET_VERSION__={json.dumps(ASSET_VERSION)};\n"
+                    f"window.__XL_ADDON_VERSION__={json.dumps(ADDON_VERSION)};"
+                    f"window.__XL_INGRESS_PATH__={json.dumps(ingress)};"
+                    f"window.__XL_ASSET_VERSION__={json.dumps(ASSET_VERSION)};\n"
                 )
                 data = prefix.encode("utf-8") + data
             elif path.suffix == ".css":
                 ctype = "text/css; charset=utf-8"
             elif path.suffix == ".html":
-                # <base> makes relative fetch("bridge/...") and static/* resolve under
-                # /api/hassio_ingress/<token>/ instead of HA Core /api/.
+                # Replace asset placeholder BEFORE injecting JS so we never corrupt
+                # identifiers like window.__XL_ASSET_VERSION__.
+                html = data.decode("utf-8").replace(
+                    "@@ASSET_VERSION@@", ASSET_VERSION
+                )
+                # <base> makes relative fetch("bridge/...") resolve under Ingress.
                 parts: list[str] = []
                 if ingress:
                     parts.append(f'<base href="{ingress}/">')
                 parts.append(
                     "<script>"
-                    f"window.__ADDON_VERSION__={json.dumps(ADDON_VERSION)};"
-                    f"window.__INGRESS_PATH__={json.dumps(ingress)};"
-                    f"window.__ASSET_VERSION__={json.dumps(ASSET_VERSION)};"
+                    f"window.__XL_ADDON_VERSION__={json.dumps(ADDON_VERSION)};"
+                    f"window.__XL_INGRESS_PATH__={json.dumps(ingress)};"
+                    f"window.__XL_ASSET_VERSION__={json.dumps(ASSET_VERSION)};"
+                    # Keep short aliases used by app.js
+                    "window.__ADDON_VERSION__=window.__XL_ADDON_VERSION__;"
+                    "window.__INGRESS_PATH__=window.__XL_INGRESS_PATH__;"
+                    "window.__ASSET_VERSION__=window.__XL_ASSET_VERSION__;"
                     "console.log("
-                    "'xLights DDP Bridge add-on v' + window.__ADDON_VERSION__,"
-                    "'asset', window.__ASSET_VERSION__,"
-                    "'ingress', window.__INGRESS_PATH__ || '(none)'"
+                    "'xLights DDP Bridge add-on v'+window.__XL_ADDON_VERSION__,"
+                    "'asset',window.__XL_ASSET_VERSION__,"
+                    "'ingress',window.__XL_INGRESS_PATH__||'(none)'"
                     ");"
                     "</script>"
                 )
-                html = (
-                    data.decode("utf-8")
-                    .replace("<!--INGRESS_SCRIPT-->", "".join(parts), 1)
-                    .replace("__ASSET_VERSION__", ASSET_VERSION)
-                )
+                html = html.replace("<!--INGRESS_SCRIPT-->", "".join(parts), 1)
                 data = html.encode("utf-8")
                 print(
                     f"Serving UI v{ADDON_VERSION} asset={ASSET_VERSION} "

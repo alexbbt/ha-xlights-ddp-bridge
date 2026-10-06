@@ -22,6 +22,35 @@ class TestWebuiVersion(unittest.TestCase):
         self.assertTrue(ver.startswith("1.0.0-"))
         self.assertEqual(len(ver.split("-", 1)[1]), 8)
 
+    def test_html_rewrite_does_not_corrupt_injected_globals(self) -> None:
+        """Regression: replacing __ASSET_VERSION__ broke window.__ASSET_VERSION__."""
+        asset = "0.2.10-068f641a"
+        raw = (
+            "<!--INGRESS_SCRIPT-->\n"
+            '<link href="static/style.@@ASSET_VERSION@@.css" />\n'
+            '<script src="static/app.@@ASSET_VERSION@@.js"></script>\n'
+        )
+        html = raw.replace("@@ASSET_VERSION@@", asset)
+        ingress = "/api/hassio_ingress/TOKEN"
+        parts = [
+            f'<base href="{ingress}/">',
+            "<script>"
+            f"window.__XL_ADDON_VERSION__={webui.json.dumps('0.2.10')};"
+            f"window.__XL_INGRESS_PATH__={webui.json.dumps(ingress)};"
+            f"window.__XL_ASSET_VERSION__={webui.json.dumps(asset)};"
+            "window.__ADDON_VERSION__=window.__XL_ADDON_VERSION__;"
+            "window.__INGRESS_PATH__=window.__XL_INGRESS_PATH__;"
+            "window.__ASSET_VERSION__=window.__XL_ASSET_VERSION__;"
+            "</script>",
+        ]
+        html = html.replace("<!--INGRESS_SCRIPT-->", "".join(parts), 1)
+        self.assertIn('window.__XL_ASSET_VERSION__="0.2.10-068f641a"', html)
+        self.assertIn("window.__ASSET_VERSION__=window.__XL_ASSET_VERSION__", html)
+        self.assertNotIn("window.0.2.10", html)
+        self.assertIn(f"static/app.{asset}.js", html)
+        self.assertTrue(webui._VERSIONED_JS.match(f"app.{asset}.js"))
+        self.assertTrue(webui._VERSIONED_CSS.match(f"style.{asset}.css"))
+
 
 if __name__ == "__main__":
     unittest.main()

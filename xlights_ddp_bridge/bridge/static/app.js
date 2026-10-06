@@ -1,16 +1,24 @@
 (() => {
+  // Marker: if DevTools still shows api() at line ~8 calling /api/*, an old
+  // cached bundle is running — path-versioned URLs should prevent that.
   const $ = (id) => document.getElementById(id);
   const version =
-    typeof window.__ADDON_VERSION__ === "string" && window.__ADDON_VERSION__
-      ? window.__ADDON_VERSION__
-      : "unknown";
+    (typeof window.__XL_ADDON_VERSION__ === "string" && window.__XL_ADDON_VERSION__) ||
+    (typeof window.__ADDON_VERSION__ === "string" && window.__ADDON_VERSION__) ||
+    "unknown";
   const assetVersion =
-    typeof window.__ASSET_VERSION__ === "string" ? window.__ASSET_VERSION__ : "";
+    (typeof window.__XL_ASSET_VERSION__ === "string" && window.__XL_ASSET_VERSION__) ||
+    (typeof window.__ASSET_VERSION__ === "string" && window.__ASSET_VERSION__) ||
+    "";
+  const ingressInjected =
+    (typeof window.__XL_INGRESS_PATH__ === "string" && window.__XL_INGRESS_PATH__) ||
+    (typeof window.__INGRESS_PATH__ === "string" && window.__INGRESS_PATH__) ||
+    "";
   console.log(
     `xLights DDP Bridge UI v${version}`,
     assetVersion ? `(assets ${assetVersion})` : "",
     "ingress=",
-    window.__INGRESS_PATH__ || "(none)"
+    ingressInjected || "(none)"
   );
 
   let available = [];
@@ -21,6 +29,9 @@
    * Never use origin-root "/api/..." — that hits Home Assistant Core.
    */
   function bridgeBase() {
+    if (ingressInjected) {
+      return ingressInjected.replace(/\/+$/, "");
+    }
     if (typeof window.__INGRESS_PATH__ === "string" && window.__INGRESS_PATH__) {
       return window.__INGRESS_PATH__.replace(/\/+$/, "");
     }
