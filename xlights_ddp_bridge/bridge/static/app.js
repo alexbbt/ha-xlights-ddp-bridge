@@ -4,13 +4,34 @@
   let available = [];
   let mapped = [];
 
+  // Under Home Assistant Ingress, absolute "/api/..." hits Core — stay relative to <base>.
+  function apiUrl(path) {
+    const cleaned = String(path).replace(/^\/+/, "");
+    try {
+      return new URL(cleaned, document.baseURI).toString();
+    } catch {
+      return cleaned;
+    }
+  }
+
   function api(path, opts = {}) {
-    return fetch(path, {
+    return fetch(apiUrl(path), {
       headers: { "Content-Type": "application/json", ...(opts.headers || {}) },
       ...opts,
     }).then(async (r) => {
-      const data = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(data.error || data.message || r.statusText);
+      const text = await r.text();
+      let data = {};
+      try {
+        data = text ? JSON.parse(text) : {};
+      } catch {
+        throw new Error(
+          `Unexpected response (${r.status}). If this is the Ingress UI, rebuild/update the add-on.`
+        );
+      }
+      if (!r.ok) {
+        const err = data.error || data.message || r.statusText || `HTTP ${r.status}`;
+        throw new Error(typeof err === "string" ? err : JSON.stringify(err));
+      }
       return data;
     });
   }
@@ -142,7 +163,7 @@
 
   async function refreshStatus() {
     try {
-      const s = await api("/api/status");
+      const s = await api("api/status");
       renderStatus(s);
     } catch (e) {
       $("status").textContent = String(e.message || e);
@@ -151,8 +172,8 @@
 
   async function load() {
     const [cfg, avail] = await Promise.all([
-      api("/api/config"),
-      api("/api/lights/available"),
+      api("api/config"),
+      api("api/lights/available"),
     ]);
     $("hz").value = cfg.hz;
     mapped = cfg.lights || [];
@@ -167,7 +188,7 @@
   $("save").onclick = async () => {
     $("saveMsg").textContent = "Saving…";
     try {
-      await api("/api/config", {
+      await api("api/config", {
         method: "POST",
         body: JSON.stringify({
           lights: mapped,
@@ -184,7 +205,7 @@
   $("testHa").onclick = async () => {
     $("testOut").textContent = "Testing…";
     try {
-      const r = await api("/api/test/ha", { method: "POST", body: "{}" });
+      const r = await api("api/test/ha", { method: "POST", body: "{}" });
       $("testOut").textContent = JSON.stringify(r, null, 2);
       await refreshStatus();
     } catch (e) {
@@ -195,7 +216,7 @@
   $("pulseWhite").onclick = async () => {
     $("testOut").textContent = "Pulsing…";
     try {
-      const r = await api("/api/test/pulse", {
+      const r = await api("api/test/pulse", {
         method: "POST",
         body: JSON.stringify({ rgb: [255, 255, 255] }),
       });
@@ -208,7 +229,7 @@
 
   $("pulseOff").onclick = async () => {
     try {
-      const r = await api("/api/test/pulse", {
+      const r = await api("api/test/pulse", {
         method: "POST",
         body: JSON.stringify({ rgb: [0, 0, 0] }),
       });
