@@ -5,31 +5,50 @@
   let mapped = [];
 
   /**
-   * Prefer server-injected path (from X-Ingress-Path). Never use origin-root
-   * "/api/..." — that hits Home Assistant Core instead of this add-on.
+   * Resolve under Ingress. Prefer injected X-Ingress-Path / <base href>.
+   * Never use origin-root "/api/..." — that hits Home Assistant Core.
    */
   function bridgeBase() {
     if (typeof window.__INGRESS_PATH__ === "string" && window.__INGRESS_PATH__) {
       return window.__INGRESS_PATH__.replace(/\/+$/, "");
     }
+    const baseEl = document.querySelector("base");
+    if (baseEl && baseEl.href) {
+      try {
+        const u = new URL(baseEl.href);
+        const m = u.pathname.match(/^(.*?\/api\/hassio_ingress\/[^/]+)/);
+        if (m) return m[1];
+      } catch {
+        /* ignore */
+      }
+    }
     const path = window.location.pathname || "/";
     const m = path.match(/^(.*?\/api\/hassio_ingress\/[^/]+)/);
     if (m) return m[1];
-    // Dev / non-ingress: stay on current directory
-    if (path.endsWith("/")) return path.replace(/\/+$/, "") || "";
-    return path.replace(/\/[^/]*$/, "");
+    return "";
   }
 
   function apiUrl(path) {
-    const base = bridgeBase();
     const cleaned = String(path).replace(/^\/+/, "");
-    // Path-absolute under ingress, or relative when base is empty
+    const base = bridgeBase();
+    // Absolute under ingress when known; else relative (honors <base href>)
     return base ? `${base}/${cleaned}` : cleaned;
   }
 
   function showBase() {
     const el = $("apiBase");
-    if (el) el.textContent = `API base: ${bridgeBase() || "(relative)"} → ${apiUrl("bridge/status")}`;
+    if (!el) return;
+    const resolved = apiUrl("bridge/status");
+    el.textContent = `API base: ${bridgeBase() || "(relative + <base>)"} → ${resolved}`;
+    const bad =
+      resolved === "/api/status" ||
+      (resolved.startsWith("/api/") &&
+        !resolved.includes("hassio_ingress") &&
+        !resolved.includes("/bridge/"));
+    if (bad) {
+      el.textContent +=
+        " — still pointing at HA Core; update add-on and hard-refresh";
+    }
   }
 
   function api(path, opts = {}) {

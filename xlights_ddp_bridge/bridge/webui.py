@@ -179,11 +179,17 @@ def make_handler(
                 ctype = "text/css; charset=utf-8"
             elif path.suffix == ".html":
                 ingress = self._ingress_path()
-                # Inject path Home Assistant sends on every Ingress request
-                script = (
+                # <base> makes relative fetch("bridge/...") and static/* resolve under
+                # /api/hassio_ingress/<token>/ instead of HA Core /api/.
+                parts: list[str] = []
+                if ingress:
+                    parts.append(f'<base href="{ingress}/">')
+                parts.append(
                     f"<script>window.__INGRESS_PATH__={json.dumps(ingress)};</script>"
                 )
-                html = data.decode("utf-8").replace("<!--INGRESS_SCRIPT-->", script, 1)
+                html = data.decode("utf-8").replace(
+                    "<!--INGRESS_SCRIPT-->", "".join(parts), 1
+                )
                 data = html.encode("utf-8")
                 print(f"Serving UI with X-Ingress-Path={ingress!r}", flush=True)
             self.send_response(200)
