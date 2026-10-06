@@ -13,13 +13,13 @@ xLights / FPP  --DDP UDP-->  this add-on  --HA API-->  light entities  -->  gove
 ## Install (Supervisor)
 
 1. **Settings → Add-ons → Add-on store → ⋮ → Repositories**
-2. Add this repository URL (or path if using a local checkout on the HA host)
+2. Add: `https://github.com/alexbbt/ha-xlights-ddp-bridge`
 3. Install **xLights DDP Entity Bridge**
-4. Configure `hz`, `ddp_port`, and ordered `lights`
+4. Replace the placeholder `lights` with your real `entity_id`s (in pixel order)
 5. Start the add-on
 6. In xLights/FPP, point the matching controller at your **Home Assistant host IP**, protocol **DDP**, channel count = `3 × number of lights`
 
-Default UDP port: **4048**. Allow that port from your show VLAN to HA if you use firewalling.
+Default UDP port: **4048**. Allow that port from your show network to HA if you use firewalling.
 
 ## Configuration
 
@@ -28,23 +28,34 @@ Default UDP port: **4048**. Allow that port from your show VLAN to HA if you use
 | `hz` | `5` | Max updates per second to Home Assistant |
 | `ddp_port` | `4048` | UDP listen port |
 | `ddp_bind` | `0.0.0.0` | Bind address |
-| `lights` | (4 outdoor spotlight segments) | Ordered list of `entity_id`s; pixel 0 → first entry |
+| `lights` | `light.example_pixel_1`, `light.example_pixel_2` | Ordered `entity_id`s; pixel 0 → first entry — **replace these** |
 
 `rgb(0,0,0)` turns the entity **off**; any other color calls `light.turn_on` with `rgb_color` and `brightness`.
+
+### Example (Govee segments via govee2mqtt)
+
+```yaml
+hz: 5
+ddp_port: 4048
+ddp_bind: "0.0.0.0"
+lights:
+  - entity_id: light.my_govee_segment_001
+  - entity_id: light.my_govee_segment_002
+  - entity_id: light.my_govee_segment_003
+  - entity_id: light.my_govee_segment_004
+```
 
 ## Local development / test (no add-on install)
 
 ```bash
 cd xlights_ddp_bridge
-export HA_URL=http://10.0.0.20:8123
+export HA_URL=http://HOMEASSISTANT_IP:8123
 export HA_TOKEN=...          # long-lived access token
 export HZ=5
 export DDP_PORT=4048
 export LIGHTS_JSON='[
-  "light.outdoor_spotlights_segment_001",
-  "light.outdoor_spotlights_segment_002",
-  "light.outdoor_spotlights_segment_003",
-  "light.outdoor_spotlights_segment_004"
+  "light.example_pixel_1",
+  "light.example_pixel_2"
 ]'
 PYTHONPATH=. python3 -m bridge
 ```
@@ -64,4 +75,4 @@ python3 -m unittest discover -s tests -v
 
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE).
