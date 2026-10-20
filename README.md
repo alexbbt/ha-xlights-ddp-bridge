@@ -6,7 +6,7 @@
 
 Home Assistant **Supervisor add-on** that receives [DDP](https://www.3wayplc.com/ddp-by-3way/) from **xLights** or **Falcon Player (FPP)**, maps each RGB pixel to a `light.*` entity, and pushes updates at a low, configurable rate.
 
-Built for smart lights that cannot keep up with full show frame rates—Govee (via govee2mqtt), Hue, Wi‑Fi bulbs, and similar integrations.
+Any Home Assistant light that accepts `light.turn_on` and `light.turn_off` can be a pixel. Use it when that light cannot keep a show frame rate. A cloud light that waits for a reply is one reason — Govee is the device this was measured against — and the same mapping works for Hue, a Wi‑Fi bulb, or any other `light.*` entity.
 
 ## Who it's for
 
@@ -20,7 +20,7 @@ Built for smart lights that cannot keep up with full show frame rates—Govee (v
 flowchart LR
   XL[xLights / FPP] -->|DDP UDP| ADD[This add-on]
   ADD -->|HA REST API| HA[light.* entities]
-  HA --> INT[Integrations<br/>govee2mqtt, Hue, …]
+  HA --> INT[The integration that owns the light]
 ```
 
 ```
@@ -44,6 +44,8 @@ Each configured `entity_id` is one RGB pixel. Channel count in xLights/FPP shoul
    - **Configuration** tab to edit `lights` as text (both stay in sync)
 5. In xLights or FPP, point the controller at your Home Assistant host IP (`HOMEASSISTANT_IP`), protocol **DDP**, channels = `3 ×` light count
 
+Architectures are **aarch64** and **amd64** only.
+
 Default UDP port: **4048**. Allow that port from your show network to Home Assistant if you use VLANs or firewalls.
 
 ## Open Web UI (Ingress)
@@ -61,21 +63,26 @@ Saving lights/`hz` from Ingress writes the same options as the Configuration tab
 
 | Option | Default | Meaning |
 |--------|---------|---------|
-| `hz` | `5` | Max updates per second to Home Assistant |
+| `hz` | `2` | Max updates per second to Home Assistant |
 | `ddp_port` | `4048` | UDP listen port |
 | `ddp_bind` | `0.0.0.0` | Bind address |
 | `lights` | example placeholders | Ordered list of `entity_id`s; pixel 0 → first entry |
 
+`1` Hz is a safe rate. `2` Hz is the measured ceiling for a Govee light that waits for a reply. Anything faster depends on the device.
+
+Each update waits for Home Assistant to finish before the next light is touched. Two slow lights in one tick can take longer than `1 / hz`, so that tick misses the rate cap.
+
 Behavior:
 
 - `rgb(0,0,0)` → `light.turn_off`
-- Any other color → `light.turn_on` with `rgb_color` and `brightness` (max of R/G/B)
+- Any other color → `light.turn_on` with `rgb_color` and `brightness` set to the max of R, G, and B
 - Unchanged colors are skipped (no redundant API calls)
+- The color Home Assistant shows is that integration's color, not a match to WLED or Twinkly. xLights gamma and `brightness` set to the max of R, G, and B both change the result. This add-on does not calibrate color.
 
-Example options (replace with your entities):
+Example options (replace with your entities). Pixel 0 is the first entry:
 
 ```yaml
-hz: 5
+hz: 2
 ddp_port: 4048
 ddp_bind: "0.0.0.0"
 lights:
@@ -83,22 +90,21 @@ lights:
   - entity_id: light.example_pixel_2
 ```
 
-### Example: Govee segments via govee2mqtt
+### Example: one whole light
 
-Govee (and similar) devices are **not** DDP targets. DDP goes to this add-on; your integration talks to the device.
+DDP is sent to this add-on. The integration that owns the light talks to the device. That can be a Govee cloud integration, Hue, or anything else that exposes a `light.*` entity.
+
+Map the entity for the whole light. Per-segment entities are the wrong target when the integration has to use the cloud: each segment is another call, and that call waits before the next light is touched.
 
 ```yaml
-hz: 5
+hz: 2
 ddp_port: 4048
 ddp_bind: "0.0.0.0"
 lights:
-  - entity_id: light.govee_segment_001
-  - entity_id: light.govee_segment_002
-  - entity_id: light.govee_segment_003
-  - entity_id: light.govee_segment_004
+  - entity_id: light.porch
 ```
 
-Any Home Assistant light that accepts `rgb_color` works. Non-RGB lights may ignore color.
+Any Home Assistant light that accepts `rgb_color` can take a color. Other lights still turn on and off.
 
 ## xLights / FPP setup
 
@@ -117,7 +123,7 @@ Any Home Assistant light that accepts `rgb_color` works. Non-RGB lights may igno
 | Nothing happens | Add-on logs show `Listening DDP…`. Test from xLights Output, or use the smoke script below. |
 | HA API errors | Add-on has `homeassistant_api: true` and Core is up before the add-on starts. |
 | Works locally, not from FPP | Firewall/VLAN: UDP from the player to `HOMEASSISTANT_IP:4048` must be allowed. |
-| Lights lag or drop | Lower `hz` (try `2`–`5`). Avoid effects that change every frame. |
+| Lights lag or drop | `1` Hz is safe. `2` Hz is the measured ceiling for a Govee light that waits for a reply; anything faster depends on the device. Two slow lights in one tick can miss that cap, because each update waits for Home Assistant before the next light is touched. |
 | Wrong light mapping | `lights` order is pixel order; pixel 0 is the first `entity_id`. |
 
 ## Local development / test
@@ -128,7 +134,7 @@ No add-on install required. Use a long-lived access token from your Home Assista
 cd xlights_ddp_bridge
 export HA_URL=http://HOMEASSISTANT_IP:8123
 export HA_TOKEN=YOUR_LONG_LIVED_TOKEN
-export HZ=5
+export HZ=2
 export DDP_PORT=4048
 export LIGHTS_JSON='["light.example_pixel_1","light.example_pixel_2"]'
 PYTHONPATH=. python3 -m bridge

@@ -13,7 +13,7 @@ from typing import Any
 class RuntimeStats:
     """Shared state between the DDP loop and Ingress web UI."""
 
-    hz: float = 5.0
+    hz: float = 2.0
     ddp_port: int = 4048
     ddp_bind: str = "0.0.0.0"
     lights: list[str] = field(default_factory=list)

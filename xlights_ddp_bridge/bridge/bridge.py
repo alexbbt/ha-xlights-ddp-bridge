@@ -91,7 +91,7 @@ def load_config_from_env() -> BridgeConfig:
     api_base = ha_url if ha_url.endswith("/api") else f"{ha_url}/api"
 
     return BridgeConfig(
-        hz=float(os.environ.get("HZ", "5")),
+        hz=float(os.environ.get("HZ", "2")),
         ddp_port=int(os.environ.get("DDP_PORT", "4048")),
         ddp_bind=os.environ.get("DDP_BIND", "0.0.0.0"),
         lights=lights,
@@ -110,7 +110,7 @@ def load_config_from_options(path: Path | str = "/data/options.json") -> BridgeC
     if not token:
         raise SystemExit("SUPERVISOR_TOKEN missing (not running as add-on?)")
     return BridgeConfig(
-        hz=float(options.get("hz", 5)),
+        hz=float(options.get("hz", 2)),
         ddp_port=int(options.get("ddp_port", 4048)),
         ddp_bind=str(options.get("ddp_bind", "0.0.0.0")),
         lights=lights,

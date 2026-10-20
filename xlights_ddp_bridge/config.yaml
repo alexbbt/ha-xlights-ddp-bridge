@@ -2,9 +2,9 @@ name: xLights DDP Entity Bridge
 version: "0.2.12"
 slug: xlights_ddp_bridge
 description: >-
-  Receive DDP from xLights or Falcon Player and map RGB pixels to Home
-  Assistant light entities at a low, configurable update rate. Useful for
-  Govee, Hue, and other smart lights that cannot take full show frame rates.
+  Receive DDP from xLights or Falcon Player and map each RGB pixel to any
+  Home Assistant light at a low, configurable update rate. For lights that
+  cannot take a full show frame rate.
 url: https://github.com/alexbbt/ha-xlights-ddp-bridge
 arch:
   - aarch64
@@ -26,7 +26,7 @@ ports:
 ports_description:
   4048/udp: DDP input from xLights or Falcon Player
 options:
-  hz: 5
+  hz: 2
   ddp_port: 4048
   ddp_bind: "0.0.0.0"
   lights:

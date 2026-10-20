@@ -139,7 +139,7 @@ def load_options() -> dict[str, Any]:
     if OPTIONS_PATH.is_file():
         return json.loads(OPTIONS_PATH.read_text(encoding="utf-8"))
     return {
-        "hz": float(os.environ.get("HZ", "5")),
+        "hz": float(os.environ.get("HZ", "2")),
         "ddp_port": int(os.environ.get("DDP_PORT", "4048")),
         "ddp_bind": os.environ.get("DDP_BIND", "0.0.0.0"),
         "lights": [
