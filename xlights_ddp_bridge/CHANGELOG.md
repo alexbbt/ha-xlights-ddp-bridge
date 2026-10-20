@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.14
+
+### Changes
+
+- Publish the app image from CI and use Home Assistant's app name. (`db86843`)
+
+
 ## 0.2.13
 
 ### Changes

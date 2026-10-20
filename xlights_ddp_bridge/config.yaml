@@ -1,12 +1,13 @@
 ---
 name: xLights DDP Entity Bridge
-version: "0.2.13"
+version: "0.2.14"
 slug: xlights_ddp_bridge
 description: >-
   Receive DDP from xLights or Falcon Player and map each RGB pixel to any
   Home Assistant light at a low, configurable update rate. For lights that
   cannot take a full show frame rate.
 url: https://github.com/alexbbt/ha-xlights-ddp-bridge
+image: ghcr.io/alexbbt/xlights_ddp_bridge
 arch:
   - aarch64
   - amd64
