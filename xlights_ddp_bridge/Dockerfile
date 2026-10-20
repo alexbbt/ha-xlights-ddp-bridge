@@ -1,26 +1,45 @@
 ARG BUILD_FROM=ghcr.io/home-assistant/base:3.21
+# hadolint ignore=DL3006
 FROM ${BUILD_FROM}
 
+# Unpinned so the base image's Alpine release stays the source of truth.
+# hadolint ignore=DL3018
 RUN apk add --no-cache python3
 
 WORKDIR /opt/xlights_ddp_bridge
 
-# config.yaml is required at runtime so the Web UI can report / cache-bust by version.
-# (Supervisor reads it from the repo; the container did not previously include it.)
+# config.yaml is copied in so the Web UI can report and cache-bust by version.
+# Supervisor reads it from the repo; the container needs its own copy.
 COPY config.yaml /opt/xlights_ddp_bridge/config.yaml
 COPY bridge /opt/xlights_ddp_bridge/bridge
 COPY run.sh /run.sh
 
 RUN chmod a+x /run.sh
 
-ARG BUILD_VERSION=0.2.13
+ARG BUILD_ARCH
+ARG BUILD_DATE
+ARG BUILD_DESCRIPTION
+ARG BUILD_NAME
+ARG BUILD_REF
+ARG BUILD_REPOSITORY
+ARG BUILD_VERSION
+
+# The Web UI already reads ADDON_VERSION. Keep that name.
 ENV ADDON_VERSION=${BUILD_VERSION}
 
 LABEL \
-  io.hass.name="xLights DDP Entity Bridge" \
-  io.hass.description="DDP from xLights/FPP to Home Assistant light entities" \
-  io.hass.type="addon" \
-  io.hass.version="0.2.13" \
-  io.hass.arch="aarch64|amd64"
+  io.hass.name="${BUILD_NAME}" \
+  io.hass.description="${BUILD_DESCRIPTION}" \
+  io.hass.arch="${BUILD_ARCH}" \
+  io.hass.type="app" \
+  io.hass.version="${BUILD_VERSION}" \
+  org.opencontainers.image.title="${BUILD_NAME}" \
+  org.opencontainers.image.description="${BUILD_DESCRIPTION}" \
+  org.opencontainers.image.source="https://github.com/${BUILD_REPOSITORY}" \
+  org.opencontainers.image.documentation="https://github.com/${BUILD_REPOSITORY}/blob/main/README.md" \
+  org.opencontainers.image.revision="${BUILD_REF}" \
+  org.opencontainers.image.version="${BUILD_VERSION}" \
+  org.opencontainers.image.created="${BUILD_DATE}" \
+  org.opencontainers.image.licenses="MIT"
 
 CMD ["/run.sh"]

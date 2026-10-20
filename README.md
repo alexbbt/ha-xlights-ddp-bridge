@@ -4,7 +4,7 @@
 [![Release](https://img.shields.io/github/v/release/alexbbt/ha-xlights-ddp-bridge?label=release)](https://github.com/alexbbt/ha-xlights-ddp-bridge/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Home Assistant **Supervisor add-on** that receives [DDP](https://www.3wayplc.com/ddp-by-3way/) from **xLights** or **Falcon Player (FPP)**, maps each RGB pixel to a `light.*` entity, and pushes updates at a low, configurable rate.
+Home Assistant **app** (formerly an add-on) that receives [DDP](https://www.3wayplc.com/ddp-by-3way/) from **xLights** or **Falcon Player (FPP)**, maps each RGB pixel to a `light.*` entity, and pushes updates at a low, configurable rate.
 
 Any Home Assistant light that accepts `light.turn_on` and `light.turn_off` can be a pixel. Use it when that light cannot keep a show frame rate. A cloud light that waits for a reply is one reason — Govee is the device this was measured against — and the same mapping works for Hue, a Wi‑Fi bulb, or any other `light.*` entity.
 
@@ -18,20 +18,22 @@ Any Home Assistant light that accepts `light.turn_on` and `light.turn_off` can b
 
 ```mermaid
 flowchart LR
-  XL[xLights / FPP] -->|DDP UDP| ADD[This add-on]
+  XL[xLights / FPP] -->|DDP UDP| ADD[This app]
   ADD -->|HA REST API| HA[light.* entities]
   HA --> INT[The integration that owns the light]
 ```
 
 ```
-xLights / FPP  --DDP UDP-->  add-on  --HA API-->  light entities  -->  integrations
+xLights / FPP  --DDP UDP-->  app  --HA API-->  light entities  -->  integrations
 ```
 
 Each configured `entity_id` is one RGB pixel. Channel count in xLights/FPP should be `3 × number of lights`.
 
-## Install (Supervisor)
+## Install
 
-1. **Settings → Add-ons → Add-on store → ⋮ → Repositories**
+Architectures are **aarch64** and **amd64**. A release publishes `ghcr.io/alexbbt/xlights_ddp_bridge:<version>`. When `config.yaml` includes `image`, Supervisor pulls that image instead of building the Dockerfile.
+
+1. **Settings → Apps → ⋮ → Repositories**
 2. Add:
 
    ```
@@ -39,25 +41,23 @@ Each configured `entity_id` is one RGB pixel. Channel count in xLights/FPP shoul
    ```
 
 3. Install **xLights DDP Entity Bridge**
-4. Start the add-on, then either:
+4. Start the app, then either:
    - **Open Web UI** (Ingress) to pick and reorder lights, or
    - **Configuration** tab to edit `lights` as text (both stay in sync)
 5. In xLights or FPP, point the controller at your Home Assistant host IP (`HOMEASSISTANT_IP`), protocol **DDP**, channels = `3 ×` light count
-
-Architectures are **aarch64** and **amd64** only.
 
 Default UDP port: **4048**. Allow that port from your show network to Home Assistant if you use VLANs or firewalls.
 
 ## Open Web UI (Ingress)
 
-Supervisor’s Configuration tab cannot host Home Assistant entity pickers, so this add-on also provides an Ingress page:
+Supervisor’s Configuration tab cannot host Home Assistant entity pickers, so this app also provides an Ingress page:
 
 - Ordered light picker (search, add/remove, reorder = DDP pixel order)
 - Live status: HA health, DDP listen address, last xLights/FPP peer, packets/sec, payload size check, per-pixel color swatches
 - Tests: HA connection check, pulse white / all off
-- Recent events ring buffer (full logs remain on the add-on **Log** tab)
+- Recent events ring buffer (full logs remain on the app **Log** tab)
 
-Saving lights/`hz` from Ingress writes the same options as the Configuration tab and hot-reloads the bridge. Changing `ddp_port` / `ddp_bind` still needs an add-on restart.
+Saving lights/`hz` from Ingress writes the same options as the Configuration tab and hot-reloads the bridge. Changing `ddp_port` / `ddp_bind` still needs an app restart.
 
 ## Configuration
 
@@ -77,7 +77,7 @@ Behavior:
 - `rgb(0,0,0)` → `light.turn_off`
 - Any other color → `light.turn_on` with `rgb_color` and `brightness` set to the max of R, G, and B
 - Unchanged colors are skipped (no redundant API calls)
-- The color Home Assistant shows is that integration's color, not a match to WLED or Twinkly. xLights gamma and `brightness` set to the max of R, G, and B both change the result. This add-on does not calibrate color.
+- The color Home Assistant shows is that integration's color, not a match to WLED or Twinkly. xLights gamma and `brightness` set to the max of R, G, and B both change the result. This app does not calibrate color.
 
 Example options (replace with your entities). Pixel 0 is the first entry:
 
@@ -92,7 +92,7 @@ lights:
 
 ### Example: one whole light
 
-DDP is sent to this add-on. The integration that owns the light talks to the device. That can be a Govee cloud integration, Hue, or anything else that exposes a `light.*` entity.
+DDP is sent to this app. The integration that owns the light talks to the device. That can be a Govee cloud integration, Hue, or anything else that exposes a `light.*` entity.
 
 Map the entity for the whole light. Per-segment entities are the wrong target when the integration has to use the cloud: each segment is another call, and that call waits before the next light is touched.
 
@@ -120,15 +120,15 @@ Any Home Assistant light that accepts `rgb_color` can take a color. Other lights
 
 | Symptom | Things to check |
 |---------|-----------------|
-| Nothing happens | Add-on logs show `Listening DDP…`. Test from xLights Output, or use the smoke script below. |
-| HA API errors | Add-on has `homeassistant_api: true` and Core is up before the add-on starts. |
+| Nothing happens | App logs show `Listening DDP…`. Test from xLights Output, or use the smoke script below. |
+| HA API errors | The app has `homeassistant_api: true` and Core is up before the app starts. |
 | Works locally, not from FPP | Firewall/VLAN: UDP from the player to `HOMEASSISTANT_IP:4048` must be allowed. |
 | Lights lag or drop | `1` Hz is safe. `2` Hz is the measured ceiling for a Govee light that waits for a reply; anything faster depends on the device. Two slow lights in one tick can miss that cap, because each update waits for Home Assistant before the next light is touched. |
 | Wrong light mapping | `lights` order is pixel order; pixel 0 is the first `entity_id`. |
 
 ## Local development / test
 
-No add-on install required. Use a long-lived access token from your Home Assistant profile.
+No app install required. Use a long-lived access token from your Home Assistant profile.
 
 ```bash
 cd xlights_ddp_bridge
@@ -156,14 +156,16 @@ PYTHONPATH=. python3 -m unittest discover -s tests -v
 
 ## Releases
 
-Pushes to `main` that pass CI automatically bump the add-on version, tag `vX.Y.Z`, and publish a [GitHub Release](https://github.com/alexbbt/ha-xlights-ddp-bridge/releases).
+Pushes to `main` that pass CI bump the app version, publish `ghcr.io/alexbbt/xlights_ddp_bridge:<version>` and `:stable`, tag `vX.Y.Z`, and publish a [GitHub Release](https://github.com/alexbbt/ha-xlights-ddp-bridge/releases).
+
+The image is pushed before that version is committed. The workflow continues only if the GHCR package is public, which a package created from this public repository inherits. **Check for updates** then pulls an image that already exists.
 
 - Default bump: **patch**
 - Commit message contains `[minor]` or starts with `feat:` → **minor**
 - Commit message contains `[major]` or `BREAKING CHANGE` → **major**
 - `[skip release]` in the commit message skips publishing
 
-After a release, use **Check for updates** on the add-on in Supervisor (it tracks `config.yaml` `version` on `main`).
+After a release, use **Check for updates** on the app (it tracks `config.yaml` `version` on `main`).
 
 ## Contributing
 

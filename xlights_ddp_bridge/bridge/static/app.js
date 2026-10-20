@@ -85,7 +85,7 @@
         !resolved.includes("/bridge/"));
     if (bad) {
       el.textContent +=
-        " — still pointing at HA Core; update add-on and hard-refresh";
+        " — still pointing at HA Core; update the app and hard-refresh";
     }
   }
 
@@ -121,7 +121,7 @@
         data = text ? JSON.parse(text) : {};
       } catch {
         throw new Error(
-          `Bad response from ${url} (${r.status}). Update/rebuild the add-on, then hard-refresh.`
+          `Bad response from ${url} (${r.status}). Update the app, then hard-refresh.`
         );
       }
       if (!r.ok) {

@@ -28,7 +28,7 @@ PYTHONPATH=. python3 -m tests.smoke_ddp --host 127.0.0.1
 
 ## Releases
 
-Merges/pushes to `main` that pass CI trigger `.github/workflows/release.yml`, which bumps `xlights_ddp_bridge/config.yaml` (and the Dockerfile label), writes `xlights_ddp_bridge/CHANGELOG.md` (where Supervisor looks for release notes), tags `vX.Y.Z`, and creates a GitHub Release.
+Merges/pushes to `main` that pass CI trigger `.github/workflows/release.yml`. That job bumps `xlights_ddp_bridge/config.yaml`, writes the `image` key the first time, writes `xlights_ddp_bridge/CHANGELOG.md` (where Supervisor looks for release notes), builds and pushes `ghcr.io/alexbbt/xlights_ddp_bridge:<version>` and `:stable`, and only then tags `vX.Y.Z` and creates a GitHub Release. It refuses to push that version if the GHCR package is not public. The Dockerfile takes its version from the `BUILD_VERSION` build arg, so the release job does not edit the Dockerfile.
 
 - Default: patch bump
 - `[minor]` or `feat:` in the commit message → minor
@@ -46,13 +46,13 @@ Changelog notes are built from commits since the previous `v*` tag, grouped into
 
 ## Scope notes
 
-- This repo is a Supervisor add-on + a small Python bridge
+- This repo is a Supervisor app (formerly an add-on) plus a small Python bridge
 - Prefer high-level DDP handling and HA service calls over protocol expansions unless discussed in an issue
-- Add-on packaging files live under `xlights_ddp_bridge/` (`config.yaml`, `Dockerfile`, `run.sh`, `DOCS.md`)
+- App packaging files live under `xlights_ddp_bridge/` (`config.yaml`, `build.yaml`, `Dockerfile`, `run.sh`, `DOCS.md`)
 
 ## Reporting bugs
 
-Use a [bug report](https://github.com/alexbbt/ha-xlights-ddp-bridge/issues/new/choose) and include add-on version, `hz`/`ddp_port`, light count, and relevant logs (redact tokens).
+Use a [bug report](https://github.com/alexbbt/ha-xlights-ddp-bridge/issues/new/choose) and include the app version, `hz`/`ddp_port`, light count, and relevant logs (redact tokens).
 
 ## Code of conduct
 

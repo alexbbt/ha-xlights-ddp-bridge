@@ -302,7 +302,7 @@ def make_handler(
                     "window.__INGRESS_PATH__=window.__XL_INGRESS_PATH__;"
                     "window.__ASSET_VERSION__=window.__XL_ASSET_VERSION__;"
                     "console.log("
-                    "'xLights DDP Bridge add-on v'+window.__XL_ADDON_VERSION__,"
+                    "'xLights DDP Bridge app v'+window.__XL_ADDON_VERSION__,"
                     "'asset',window.__XL_ASSET_VERSION__,"
                     "'ingress',window.__XL_INGRESS_PATH__||'(none)'"
                     ");"
@@ -411,7 +411,7 @@ def make_handler(
                         {
                             "error": (
                                 "No lights received. Add lights to Mapped and Save. "
-                                "If Mapped was not empty, update the add-on "
+                                "If Mapped was not empty, update the app "
                                 "(POST body may have been dropped by Ingress)."
                             ),
                             "received_keys": list(body.keys()),

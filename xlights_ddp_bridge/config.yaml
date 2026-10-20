@@ -1,3 +1,4 @@
+---
 name: xLights DDP Entity Bridge
 version: "0.2.13"
 slug: xlights_ddp_bridge
@@ -9,15 +10,12 @@ url: https://github.com/alexbbt/ha-xlights-ddp-bridge
 arch:
   - aarch64
   - amd64
-startup: application
-boot: auto
 init: false
 homeassistant_api: true
 hassio_api: true
 ingress: true
-ingress_port: 8099
-# stream mode can chunk POST bodies without Content-Length; our UI needs the body
-ingress_stream: false
+# Leave ingress_stream unset. The default is false. Stream mode chunks POST
+# bodies, and the Web UI needs the full body.
 panel_icon: mdi:palette-outline
 panel_title: xLights DDP Bridge
 panel_admin: false

@@ -12,7 +12,7 @@ A clear description of what went wrong.
 
 ## Environment
 
-- Add-on / repo version:
+- App / repo version:
 - Home Assistant Core / OS / Supervisor (if relevant):
 - xLights or FPP version:
 - `hz` / `ddp_port` / number of lights:
@@ -29,7 +29,7 @@ A clear description of what went wrong.
 
 ## Logs
 
-Paste relevant add-on logs (redact tokens and personal IPs if needed).
+Paste relevant app logs (redact tokens and personal IPs if needed).
 
 ```text
 

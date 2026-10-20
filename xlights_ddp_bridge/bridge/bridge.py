@@ -108,7 +108,7 @@ def load_config_from_options(path: Path | str = "/data/options.json") -> BridgeC
         raise SystemExit("No lights configured in options.json")
     token = os.environ.get("SUPERVISOR_TOKEN", "").strip()
     if not token:
-        raise SystemExit("SUPERVISOR_TOKEN missing (not running as add-on?)")
+        raise SystemExit("SUPERVISOR_TOKEN missing (not running as an app?)")
     return BridgeConfig(
         hz=float(options.get("hz", 2)),
         ddp_port=int(options.get("ddp_port", 4048)),

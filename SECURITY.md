@@ -20,5 +20,5 @@ You should receive an acknowledgement within a few days. After a fix is availabl
 
 ## Scope notes
 
-- The add-on listens for unauthenticated DDP on a configured UDP port (by design, matching xLights/FPP). Restrict that port to trusted show networks.
-- Long-lived Home Assistant tokens used for local development must never be committed. Prefer Supervisor API access when running as an add-on.
+- The app listens for unauthenticated DDP on a configured UDP port (by design, matching xLights/FPP). Restrict that port to trusted show networks.
+- Long-lived Home Assistant tokens used for local development must never be committed. Prefer Supervisor API access when running as an app.

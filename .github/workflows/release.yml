@@ -1,13 +1,20 @@
+---
 name: Release
 
+# yamllint disable-line rule:truthy
 on:
   workflow_run:
-    workflows: [CI]
-    types: [completed]
-    branches: [main]
+    workflows:
+      - CI
+    types:
+      - completed
+    branches:
+      - main
 
 permissions:
   contents: write
+  packages: write
+  id-token: write
 
 jobs:
   release:
@@ -19,7 +26,7 @@ jobs:
 
     steps:
       - name: Checkout main
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: main
           fetch-depth: 0
@@ -61,7 +68,6 @@ jobs:
         run: |
           set -euo pipefail
           CONFIG=xlights_ddp_bridge/config.yaml
-          DOCKER=xlights_ddp_bridge/Dockerfile
           CURRENT=$(grep -E '^version:' "$CONFIG" | sed -E 's/version:[[:space:]]*"?([^"]+)"?/\1/')
           IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
           case "${{ steps.bump.outputs.type }}" in
@@ -81,8 +87,13 @@ jobs:
           echo "exists=false" >> "$GITHUB_OUTPUT"
 
           sed -i -E "s/^version: .*/version: \"${NEW}\"/" "$CONFIG"
-          sed -i -E "s/io.hass.version=\"[^\"]+\"/io.hass.version=\"${NEW}\"/" "$DOCKER"
-          sed -i -E "s/^ARG BUILD_VERSION=.*/ARG BUILD_VERSION=${NEW}/" "$DOCKER"
+          # image: is added here, not in the source commit, so a version is never
+          # published that tells Supervisor to pull an image that does not exist yet.
+          # The commit below happens only after that image is public on GHCR.
+          if ! grep -q '^image:' "$CONFIG"; then
+            sed -i '/^url:/a image: ghcr.io/alexbbt/xlights_ddp_bridge' "$CONFIG"
+          fi
+          # Image labels take BUILD_VERSION at docker build time, below.
           # Static UI ?v=__ASSET_VERSION__ is filled at serve time (version + asset hash)
 
           # Commits since previous release tag (fallback: last 20 on main)
@@ -166,7 +177,7 @@ jobs:
             fi
           } > /tmp/changelog-section.md
 
-          # Supervisor only serves CHANGELOG.md from inside the add-on folder
+          # Supervisor only serves CHANGELOG.md from inside the app folder
           CHANGELOG=xlights_ddp_bridge/CHANGELOG.md
           if ! grep -qE "^## ${NEW}$" "$CHANGELOG"; then
             BODY=$(awk '/^# Changelog/{next} {print}' "$CHANGELOG")
@@ -183,6 +194,91 @@ jobs:
           # Soften heading for GitHub release body (title already has version)
           sed -i -E "1s/^## ${NEW}$/## What's changed/" /tmp/release-notes.md
 
+      - name: Image build date
+        if: steps.skip.outputs.skip != 'true' && steps.version.outputs.exists != 'true'
+        id: meta
+        run: echo "date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GHCR
+        if: steps.skip.outputs.skip != 'true' && steps.version.outputs.exists != 'true'
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up QEMU
+        if: steps.skip.outputs.skip != 'true' && steps.version.outputs.exists != 'true'
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+
+      - name: Set up Docker Buildx
+        if: steps.skip.outputs.skip != 'true' && steps.version.outputs.exists != 'true'
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+
+      - name: Publish image
+        if: steps.skip.outputs.skip != 'true' && steps.version.outputs.exists != 'true'
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: xlights_ddp_bridge
+          file: xlights_ddp_bridge/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          provenance: false
+          sbom: false
+          tags: |
+            ghcr.io/alexbbt/xlights_ddp_bridge:${{ steps.version.outputs.new }}
+            ghcr.io/alexbbt/xlights_ddp_bridge:stable
+          build-args: |
+            BUILD_ARCH=aarch64|amd64
+            BUILD_DATE=${{ steps.meta.outputs.date }}
+            BUILD_DESCRIPTION=DDP from xLights or Falcon Player to Home Assistant lights
+            BUILD_NAME=xLights DDP Entity Bridge
+            BUILD_REF=${{ github.sha }}
+            BUILD_REPOSITORY=${{ github.repository }}
+            BUILD_VERSION=${{ steps.version.outputs.new }}
+
+      - name: Make the GHCR package public
+        if: steps.skip.outputs.skip != 'true' && steps.version.outputs.exists != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+          PKG="xlights_ddp_bridge"
+          PATH_API="/users/${OWNER}/packages/container/${PKG}"
+
+          read_visibility() {
+            gh api "${PATH_API}" --jq .visibility 2>/dev/null || true
+          }
+
+          # A package created by GITHUB_TOKEN inherits the repository visibility.
+          # Poll until the registry has registered it, then require public.
+          vis=""
+          for _ in 1 2 3 4 5 6 7 8 9 10; do
+            vis="$(read_visibility)"
+            if [ -n "${vis}" ]; then
+              break
+            fi
+            sleep 10
+          done
+
+          if [ "${vis}" != "public" ]; then
+            gh api --method PATCH \
+              -H "Accept: application/vnd.github+json" \
+              "${PATH_API}" \
+              -f visibility=public || true
+            vis="$(read_visibility)"
+          fi
+
+          echo "visibility=${vis:-unknown}"
+          if [ "${vis}" != "public" ]; then
+            echo "ghcr.io/${OWNER}/${PKG} is not public."
+            echo "Set it to Public under package settings, then re-run this workflow."
+            echo "https://github.com/users/${OWNER}/packages/container/${PKG}/settings"
+            echo "Refusing to publish a version that would pull a private image."
+            exit 1
+          fi
+
       - name: Commit, tag, and release
         if: steps.skip.outputs.skip != 'true' && steps.version.outputs.exists != 'true'
         env:
@@ -192,7 +288,7 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add xlights_ddp_bridge/config.yaml xlights_ddp_bridge/Dockerfile xlights_ddp_bridge/CHANGELOG.md
+          git add xlights_ddp_bridge/config.yaml xlights_ddp_bridge/CHANGELOG.md
           git commit -m "chore: release v${NEW} [skip release]"
           git push origin main
           git tag "v${NEW}"
