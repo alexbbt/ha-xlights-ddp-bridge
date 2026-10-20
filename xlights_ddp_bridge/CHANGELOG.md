@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.13
+
+### Changes
+
+- Set the default update rate to 2 Hz and document any Home Assistant light. (`8a9d06e`)
+
+
 ## 0.2.12
 
 ### Changes
