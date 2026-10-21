@@ -1,6 +1,6 @@
 ---
 name: xLights DDP Entity Bridge
-version: "0.2.14"
+version: "0.2.15"
 slug: xlights_ddp_bridge
 description: >-
   Receive DDP from xLights or Falcon Player and map each RGB pixel to any

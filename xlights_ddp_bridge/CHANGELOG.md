@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.15
+
+### Documentation
+
+- Rewrite the README for people installing and running the app. (`38a2d75`)
+
+
 ## 0.2.14
 
 ### Changes
