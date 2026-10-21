@@ -14,7 +14,7 @@ xLights / FPP  --DDP UDP-->  this app  --HA API-->  light entities
 
 Use **Open Web UI** on the app to pick lights with an entity selector, reorder pixels, watch DDP/xLights traffic, and run connection tests. The Configuration tab remains available for the same options as plain text—both paths write the same settings.
 
-This is a Home Assistant app (formerly an add-on). Install it from **Settings → Apps**. Architectures are aarch64 and amd64. When this app's config includes an `image`, Supervisor pulls that image instead of building the Dockerfile.
+This is a Home Assistant app (formerly an add-on) for Home Assistant OS or Supervised. Install it from **Settings → Apps → Install app → ⋮ → Repositories**.
 
 ## Configuration
 
@@ -49,7 +49,7 @@ lights:
 
 1. Add a network controller:
    - Protocol: **DDP**
-   - IP: your Home Assistant host (`HOMEASSISTANT_IP`)
+   - IP: the IP address of the machine running Home Assistant
    - Channels: `3 ×` number of configured lights
 2. Create a model (for example a Single Line with N nodes) on that controller
 3. Sequence relatively slow color changes on that model—avoid high-speed twinkles on slow integrations

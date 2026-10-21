@@ -11,19 +11,23 @@ cd xlights_ddp_bridge
 PYTHONPATH=. python3 -m unittest discover -s tests -v
 ```
 
-Optional local bridge (talks to a real HA instance):
+Optional local bridge (talks to a real Home Assistant instance). Use a long-lived access token from your profile:
 
 ```bash
-export HA_URL=http://HOMEASSISTANT_IP:8123
+cd xlights_ddp_bridge
+export HA_URL=http://192.0.2.10:8123
 export HA_TOKEN=YOUR_LONG_LIVED_TOKEN
-export LIGHTS_JSON='["light.example_pixel_1"]'
+export HZ=2
+export DDP_PORT=4048
+export LIGHTS_JSON='["light.example_pixel_1","light.example_pixel_2"]'
 PYTHONPATH=. python3 -m bridge
 ```
 
-Send a one-shot DDP packet:
+In another terminal, send one DDP packet:
 
 ```bash
-PYTHONPATH=. python3 -m tests.smoke_ddp --host 127.0.0.1
+cd xlights_ddp_bridge
+PYTHONPATH=. python3 -m tests.smoke_ddp --host 127.0.0.1 --port 4048
 ```
 
 ## Releases
